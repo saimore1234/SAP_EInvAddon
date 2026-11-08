@@ -92,7 +92,7 @@ namespace EInvGstAddon.Tests
         {
             var cfg = new AppConfig
             {
-                Id = "abc12345", Name = "ABC", SapDatabase = "ABC", ErpUrl = "https://erp.example.test", ApiKey = "key123456", ErpCompany = "ABC Manufacturing Private Limited", ErpAbbr = "ABC",
+                Id = "abc12345", Name = "ABC", IntegrationId = "ABCINT", SapDatabase = "ABC", ErpUrl = "https://erp.example.test", ApiKey = "key123456", ErpCompany = "ABC Manufacturing Private Limited", ErpAbbr = "ABC",
                 FreightAccount = "Freight - ABC", RoundOffAccount = "Round Off - ABC"
             };
             cfg.ApiSecret = "secret123456";

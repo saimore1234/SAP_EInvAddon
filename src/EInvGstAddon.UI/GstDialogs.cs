@@ -44,7 +44,7 @@ namespace EInvGstAddon.UI
         }
 
         /// <summary>Validation / check results: one line per check, errors individually.</summary>
-        public static void Checks(string title, IList<GstService.CheckItem> items, string footer)
+        public static void Checks(string title, IList<CheckLine> items, string footer)
         {
             using (var f = NewForm(title, 760, 520))
             {

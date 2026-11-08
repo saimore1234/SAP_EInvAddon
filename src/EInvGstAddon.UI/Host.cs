@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using EInvGstAddon.Common;
 using EInvGstAddon.Core;
 using EInvGstAddon.Database;
-using EInvGstAddon.ERPNext;
 
 namespace EInvGstAddon.UI
 {
@@ -57,12 +55,9 @@ namespace EInvGstAddon.UI
         public const string Root = "EINV_ROOT";
         private static readonly string[][] Items =
         {
-            new[] { "EINV_M_DASH", "Dashboard" }, new[] { "EINV_M_SYNC", "Invoice Synchronization" }, new[] { "EINV_M_PEND", "Pending Synchronization" },
-            new[] { "EINV_M_FAIL", "Failed Synchronization" }, new[] { "EINV_M_CUST", "Customer Mapping" }, new[] { "EINV_M_ITEM", "Item Mapping" },
-            new[] { "EINV_M_WHS", "Warehouse Mapping" }, new[] { "EINV_M_SET", "ERPNext Connection Settings" }, new[] { "EINV_M_LOGS", "Sync Logs" },
-            new[] { "EINV_M_HIST", "Integration History" },
-            new[] { "EINV_M_EINV", "Generate E-Invoice" }, new[] { "EINV_M_EWB", "Generate E-Way Bill" }, new[] { "EINV_M_REGI", "E-Invoice Register" },
-            new[] { "EINV_M_REGW", "E-Way Bill Register" }, new[] { "EINV_M_GST", "GST Configuration" }, new[] { "EINV_M_TAX", "Tax & Account Mapping" }
+            new[] { "EINV_M_DASH", "Dashboard" }, new[] { "EINV_M_EINV", "Generate E-Invoice" }, new[] { "EINV_M_EWB", "Generate E-Way Bill" },
+            new[] { "EINV_M_REGI", "E-Invoice Register" }, new[] { "EINV_M_REGW", "E-Way Bill Register" }, new[] { "EINV_M_HIST", "Integration History" },
+            new[] { "EINV_M_LOGS", "Error Logs" }, new[] { "EINV_M_GST", "GST Configuration" }, new[] { "EINV_M_TAX", "GST Tax Mapping" }, new[] { "EINV_M_SET", "ERPNext Connection Settings" }
         };
         private readonly SAPbouiCOM.Application _app;
         public MenuManager(SAPbouiCOM.Application app) { _app = app; }
@@ -85,6 +80,9 @@ namespace EInvGstAddon.UI
 
         public void Remove()
         {
+            // children of the earlier (Sales-Invoice based) menu may exist after an upgrade: remove them as well
+            var legacy = new[] { "EINV_M_SYNC", "EINV_M_PEND", "EINV_M_FAIL", "EINV_M_CUST", "EINV_M_ITEM", "EINV_M_WHS" };
+            foreach (var id in legacy) { try { if (_app.Menus.Exists(id)) _app.Menus.RemoveEx(id); } catch { } }
             for (int i = Items.Length - 1; i >= -1; i--)
             {
                 string uid = i >= 0 ? Items[i][0] : Root;
@@ -98,56 +96,12 @@ namespace EInvGstAddon.UI
     {
         private readonly AddonServices _s = new AddonServices();
         private MenuManager _menu;
-        private InvoiceContextMenu _ctxMenu;
-        private Coordinator _coord;
-        private Timer _timer;
-        private static readonly Regex DocEntryRx = new Regex(@"<DocEntry>\s*(\d+)\s*</DocEntry>", RegexOptions.IgnoreCase);
 
         public void Run(string connectionString)
         {
             UiThread.Capture();
             _s.Sap = new SapConnection();
             _s.Sap.Connect(connectionString);
-            SapReaderSetup();
-            FormRouter.CloseStale(_s.App);
-            _s.Router = new FormRouter(_s);
-            _coord = new Coordinator(_s);
-            _s.Coordinator = _coord;
-
-            try
-            {
-                var installer = new SchemaInstaller(_s.Di);
-                _s.SchemaReady = installer.IsInstalled();
-                if (!_s.SchemaReady) _s.Status("E-Invoice & ERPNext: SAP objects are missing. Open ERPNext Connection Settings and click 'Create SAP UDF/UDT'.", true);
-            }
-            catch (Exception ex) { Logger.Error("schema.check.failed", ex); }
-
-            _s.Queue = new SyncQueue(() => _s.Engine(), (d, o) => _coord.OnResult(d, o));
-            _ctxMenu = new InvoiceContextMenu(_s);
-            _ctxMenu.RemoveAll();                       // leftovers of a crashed earlier instance
-            _menu = new MenuManager(_s.App);
-            _menu.Create();
-            _s.App.AppEvent += OnAppEvent;
-            _s.App.MenuEvent += OnMenuEvent;
-            _s.App.ItemEvent += OnItemEvent;
-            _s.App.FormDataEvent += OnFormDataEvent;
-            _s.App.RightClickEvent += OnRightClick;
-
-            if (!_s.HasConfig) _s.Status("E-Invoice & ERPNext: no configuration for company database '" + _s.Di.DatabaseName + "'. Open ERPNext Connection Settings to create one.", true);
-            if (_s.HasConfig && _s.SchemaReady && string.Equals(_s.Sap.DatabaseName, _s.Cfg.SapDatabase, StringComparison.OrdinalIgnoreCase))
-            {
-                _coord.StartupScan();
-                _coord.Tick();
-            }
-            _timer = new Timer { Interval = 30000 };
-            _timer.Tick += (a, b) => _coord.Tick();
-            _timer.Start();
-            _s.Status("E-Invoice & ERPNext Integration add-on started (" + _s.Sap.DatabaseName + ").", false);
-            Application.Run();
-        }
-
-        private void SapReaderSetup()
-        {
             _s.Di = new DiSession(_s.Sap.GetDiCompany(), new UiThread());
             // the active configuration is chosen by the SAP company database that is open right now
             var cfg = ConfigStore.FindFor(_s.Di.DatabaseName);
@@ -155,6 +109,28 @@ namespace EInvGstAddon.UI
             _s.Cfg = cfg ?? new AppConfig { Id = AppConfig.NewId(), SapDatabase = _s.Di.DatabaseName, Active = false, AutoSync = false, Name = "(not configured)" };
             _s.Store = new DiStateStore(_s.Di, _s.Cfg.StoredConfigId);
             _s.Source = new SapReader(new DiRunner(_s.Di), _s.Di.DatabaseName);
+            FormRouter.CloseStale(_s.App);
+            _s.Router = new FormRouter(_s);
+
+            try
+            {
+                _s.SchemaReady = new SchemaInstaller(_s.Di).IsInstalled();
+                if (!_s.SchemaReady) _s.Status("E-Invoice & ERPNext: SAP objects are missing or out of date. Open ERPNext Connection Settings and click 'Create SAP UDF/UDT'.", true);
+            }
+            catch (Exception ex) { Logger.Error("schema.check.failed", ex); }
+
+            _s.InvoiceMenu = new InvoiceContextMenu(_s);
+            _s.InvoiceMenu.RemoveAll();                       // leftovers of a crashed earlier instance
+            _menu = new MenuManager(_s.App);
+            _menu.Create();
+            _s.App.AppEvent += OnAppEvent;
+            _s.App.MenuEvent += OnMenuEvent;
+            _s.App.ItemEvent += OnItemEvent;
+            _s.App.RightClickEvent += OnRightClick;
+
+            if (!_s.HasConfig) _s.Status("E-Invoice & ERPNext: no configuration for company database '" + _s.Di.DatabaseName + "'. Open ERPNext Connection Settings to create one.", true);
+            else _s.Status("E-Invoice & ERPNext GST add-on started (" + _s.Sap.DatabaseName + " -> " + _s.Cfg.IntegrationId + ", " + _s.Cfg.Environment + ").", false);
+            Application.Run();
         }
 
         private void OnAppEvent(SAPbouiCOM.BoAppEventTypes t)
@@ -177,50 +153,30 @@ namespace EInvGstAddon.UI
             string uid = e.MenuUID;
             if (uid != null && uid.StartsWith(CtxMenuDefinition.IdPrefix, StringComparison.Ordinal))
             {
-                try { _ctxMenu.OnMenu(uid); } catch (Exception ex) { Logger.Error("ctx.menu.failed", ex, "uid", uid); }
+                try { _s.InvoiceMenu.OnMenu(uid); } catch (Exception ex) { Logger.Error("ctx.menu.failed", ex, "uid", uid); }
                 return;
             }
             if (uid == null || !uid.StartsWith("EINV_M_", StringComparison.Ordinal)) return;
             try
             {
+                if (uid == "EINV_M_SET") { _s.Router.Open(SettingsForm.Type, () => new SettingsForm(_s)); return; }
+                if (!_s.HasConfig) { _s.Alert("There is no active ERPNext configuration for the open SAP company (" + _s.Di.DatabaseName + ").\nOpen ERPNext Connection Settings first."); return; }
+                if (!_s.SchemaReady) { _s.Alert("The SAP objects are missing or out of date.\nOpen ERPNext Connection Settings > Create SAP UDF/UDT, then log out and in again."); return; }
                 switch (uid)
                 {
-                    case "EINV_M_SET": _s.Router.Open(SettingsForm.Type, () => new SettingsForm(_s)); break;
-                    default:
-                        if (!_s.HasConfig) { _s.Alert("There is no active ERPNext configuration for the open SAP company (" + _s.Di.DatabaseName + ").\nOpen ERPNext Connection Settings first."); break; }
-                        OpenConfigured(uid);
-                        break;
+                    case "EINV_M_DASH": _s.Router.Open(DashboardForm.Type, () => new DashboardForm(_s)); break;
+                    case "EINV_M_EINV": _s.Router.Open(GstLauncherForm.TypeOf(false), () => new GstLauncherForm(_s, false)); break;
+                    case "EINV_M_EWB": _s.Router.Open(GstLauncherForm.TypeOf(true), () => new GstLauncherForm(_s, true)); break;
+                    case "EINV_M_REGI": _s.Router.Open(RegisterForm.TypeOf(false), () => new RegisterForm(_s, false)); break;
+                    case "EINV_M_REGW": _s.Router.Open(RegisterForm.TypeOf(true), () => new RegisterForm(_s, true)); break;
+                    case "EINV_M_HIST": _s.Router.Open(HistoryForm.TypeOf(false), () => new HistoryForm(_s, false)); break;
+                    case "EINV_M_LOGS": _s.Router.Open(HistoryForm.TypeOf(true), () => new HistoryForm(_s, true)); break;
+                    case "EINV_M_GST": _s.Router.Open(GstConfigForm.Type, () => new GstConfigForm(_s)); break;
+                    case "EINV_M_TAX": _s.Router.Open(GstTaxMappingForm.Type, () => new GstTaxMappingForm(_s)); break;
                 }
             }
             catch (Exception ex) { Logger.Error("menu.failed", ex, "uid", uid); _s.Alert("Could not open the screen: " + ex.Message); }
         }
-
-        private void OpenConfigured(string uid)
-        {
-            {
-                switch (uid)
-                {
-                    case "EINV_M_DASH": _s.Router.Open(DashboardForm.Type, () => new DashboardForm(_s)); break;
-                    case "EINV_M_EINV": _s.Router.Open(EInvoiceForm.Type, () => new EInvoiceForm(_s)); break;
-                    case "EINV_M_EWB": _s.Router.Open(EWayBillForm.Type, () => new EWayBillForm(_s)); break;
-                    case "EINV_M_REGI": _s.Router.Open(RegisterForm.TypeOf(false), () => new RegisterForm(_s, false)); break;
-                    case "EINV_M_REGW": _s.Router.Open(RegisterForm.TypeOf(true), () => new RegisterForm(_s, true)); break;
-                    case "EINV_M_GST": _s.Router.Open(GstConfigForm.Type, () => new GstConfigForm(_s)); break;
-                    case "EINV_M_TAX": _s.Router.Open(TaxMappingForm.Type, () => new TaxMappingForm(_s)); break;
-                    case "EINV_M_SYNC": OpenList(ListMode.All); break;
-                    case "EINV_M_PEND": OpenList(ListMode.Pending); break;
-                    case "EINV_M_FAIL": OpenList(ListMode.Failed); break;
-                    case "EINV_M_LOGS": OpenList(ListMode.Logs); break;
-                    case "EINV_M_HIST": OpenList(ListMode.History); break;
-                    case "EINV_M_CUST": OpenMap(MapKind.Customer); break;
-                    case "EINV_M_ITEM": OpenMap(MapKind.Item); break;
-                    case "EINV_M_WHS": OpenMap(MapKind.Warehouse); break;
-                }
-            }
-        }
-
-        private void OpenList(ListMode m) { _s.Router.Open(SyncListForm.TypeOf(m), () => new SyncListForm(_s, m)); }
-        private void OpenMap(MapKind k) { _s.Router.Open(MappingForm.TypeOf(k), () => new MappingForm(_s, k)); }
 
         private void OnItemEvent(string formUid, ref SAPbouiCOM.ItemEvent e, out bool bubble)
         {
@@ -229,8 +185,8 @@ namespace EInvGstAddon.UI
             {
                 try
                 {
-                    if (e.EventType == SAPbouiCOM.BoEventTypes.et_FORM_ACTIVATE) _ctxMenu.OnFormActivated(formUid);
-                    else if (e.EventType == SAPbouiCOM.BoEventTypes.et_FORM_UNLOAD) _ctxMenu.OnFormClosed(formUid);
+                    if (e.EventType == SAPbouiCOM.BoEventTypes.et_FORM_ACTIVATE) _s.InvoiceMenu.OnFormActivated(formUid);
+                    else if (e.EventType == SAPbouiCOM.BoEventTypes.et_FORM_UNLOAD) _s.InvoiceMenu.OnFormClosed(formUid);
                 }
                 catch (Exception ex) { Logger.Warn("ctx.formevent.failed", "error", ex.Message); }
             }
@@ -240,33 +196,13 @@ namespace EInvGstAddon.UI
         private void OnRightClick(ref SAPbouiCOM.ContextMenuInfo eventInfo, out bool bubble)
         {
             bubble = true;
-            try { _ctxMenu.OnRightClick(eventInfo); } catch (Exception ex) { Logger.Error("ctx.rightclick.failed", ex); }
-        }
-
-        /// <summary>
-        /// Primary trigger: A/R Invoice (object 13) added. We act only on the AFTER event with ActionSuccess = true,
-        /// i.e. the document is committed in SAP; the heavy work is posted off this callback.
-        /// </summary>
-        private void OnFormDataEvent(ref SAPbouiCOM.BusinessObjectInfo info, out bool bubble)
-        {
-            bubble = true;
-            try
-            {
-                if (info.BeforeAction || !info.ActionSuccess) return;
-                if (info.EventType != SAPbouiCOM.BoEventTypes.et_FORM_DATA_ADD || info.Type != Constants.ArInvoiceObjType) return;
-                var m = DocEntryRx.Match(info.ObjectKey ?? "");
-                if (!m.Success) { Logger.Warn("invoice.event.nokey", "key", info.ObjectKey); return; }
-                _coord.OnInvoiceAdded(int.Parse(m.Groups[1].Value));
-            }
-            catch (Exception ex) { Logger.Error("formdata.failed", ex); }
+            try { _s.InvoiceMenu.OnRightClick(eventInfo); } catch (Exception ex) { Logger.Error("ctx.rightclick.failed", ex); }
         }
 
         public void Shutdown()
         {
-            try { if (_timer != null) _timer.Stop(); } catch { }
-            try { if (_s.Queue != null) _s.Queue.Dispose(); } catch { }
             try { if (_s.Router != null) _s.Router.CloseAll(); } catch { }
-            try { if (_ctxMenu != null) _ctxMenu.RemoveAll(); } catch { }
+            try { if (_s.InvoiceMenu != null) _s.InvoiceMenu.RemoveAll(); } catch { }
             try { if (_menu != null) _menu.Remove(); } catch { }
             try { _s.Sap.Release(); } catch { }
             Application.ExitThread();

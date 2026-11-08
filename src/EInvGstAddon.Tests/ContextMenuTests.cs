@@ -23,32 +23,32 @@ namespace EInvGstAddon.Tests
 
     public class ContextMenuTests
     {
-        private static string Id(CtxAction a) { return CtxMenuDefinition.IdPrefix + a.ToString().ToUpperInvariant(); }
-        private static SyncRecord Synced() { return new SyncRecord { DocEntry = 5, Status = "Synced", ErpInvoice = "INV/1" }; }
-        private static GstStatus St(int docstatus = 1, string irn = null, DateTime? ack = null, string ewb = null, DateTime? ewbDate = null, DateTime? valid = null)
+        private static GstStatus St(string irn = null, DateTime? ack = null, string ewb = null, DateTime? ewbDate = null, DateTime? valid = null, bool irnCancelled = false, bool einvUnknown = false, bool ewbUnknown = false)
         {
-            return new GstStatus { SalesInvoice = "INV/1", DocStatus = docstatus, Irn = irn, AckDate = ack, EwbNo = ewb, EwbDate = ewbDate, EwbValidUpto = valid };
+            return new GstStatus { SalesInvoice = "SAP 67", DocStatus = 1, Irn = irn, AckDate = ack, EwbNo = ewb, EwbDate = ewbDate, EwbValidUpto = valid, IrnCancelled = irnCancelled, EInvoiceUnknown = einvUnknown, EwbUnknown = ewbUnknown };
         }
 
         // ---------------------------------------------------------------- menu creation and duplicates
         [Fact]
-        public void Menu_has_all_21_actions_in_three_groups_with_unique_ids()
+        public void Menu_has_all_22_actions_in_three_groups_with_unique_ids()
         {
-            Assert.Equal(21, CtxMenuDefinition.Items.Count);
-            Assert.Equal(21, CtxMenuDefinition.Items.Select(i => i.Id).Distinct().Count());
+            Assert.Equal(22, CtxMenuDefinition.Items.Count);
+            Assert.Equal(22, CtxMenuDefinition.Items.Select(i => i.Id).Distinct().Count());
             Assert.All(CtxMenuDefinition.Items, i => Assert.StartsWith("EINV_C_", i.Id));
             Assert.Equal(4, CtxMenuDefinition.Items.Count(i => i.Group == "ERPNext"));
-            Assert.Equal(8, CtxMenuDefinition.Items.Count(i => i.Group == "E-Invoice"));
+            Assert.Equal(9, CtxMenuDefinition.Items.Count(i => i.Group == "E-Invoice"));
             Assert.Equal(9, CtxMenuDefinition.Items.Count(i => i.Group == "E-Way Bill"));
+            foreach (var caption in new[] { "Validate GST Invoice", "Synchronize GST Data / Send Request", "View Integration History", "Refresh GST Status", "View IRN", "View Acknowledgement", "View QR Code", "Download Signed Data", "Refresh IRN Status", "Update Vehicle", "Update Transporter", "Cancel EWB", "View EWB Details" })
+                Assert.Contains(CtxMenuDefinition.Items, i => i.Caption == caption);
         }
 
         [Fact]
         public void Menu_is_created_under_the_sap_context_menu_and_removed_completely()
         {
             var host = new FakeMenuHost(); var b = new CtxMenuBuilder(host);
-            b.Show(CtxStateCalculator.Compute(Synced(), St(), true, true, DateTime.Now));
+            b.Show(CtxStateCalculator.Compute(St(), true, true, true, DateTime.Now));
             Assert.Equal("1280", host.Parent[CtxMenuDefinition.RootId]);
-            Assert.Equal(1 + 3 + 21, host.Parent.Count);
+            Assert.Equal(1 + 3 + 22, host.Parent.Count);
             b.Hide();
             Assert.Empty(host.Parent);
         }
@@ -58,7 +58,7 @@ namespace EInvGstAddon.Tests
         {
             var host = new FakeMenuHost(); var b = new CtxMenuBuilder(host);
             for (int i = 0; i < 5; i++) b.Show(new CtxState());       // would throw on a duplicate id
-            Assert.Equal(25, host.Parent.Count);
+            Assert.Equal(26, host.Parent.Count);
             b.Hide(); b.Hide();                                       // hiding twice is harmless
             Assert.Empty(host.Parent);
         }
@@ -111,32 +111,28 @@ namespace EInvGstAddon.Tests
             g.Leave(5); Assert.True(g.TryEnter(5));
         }
 
-        // ---------------------------------------------------------------- context-aware visibility
+        // ---------------------------------------------------------------- context-aware visibility (no ERPNext invoice exists: the SAP invoice is the source)
         [Fact]
-        public void Not_synchronized_invoice_offers_sync_only()
+        public void Without_a_configuration_only_history_is_available()
         {
-            var s = CtxStateCalculator.Compute(null, null, true, true, DateTime.Now);
-            Assert.True(s.Has(CtxAction.Sync)); Assert.True(s.Has(CtxAction.History));
-            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.False(s.Has(CtxAction.GenerateEwb)); Assert.False(s.Has(CtxAction.Submit)); Assert.False(s.Has(CtxAction.RefreshIrn));
-            var failed = CtxStateCalculator.Compute(new SyncRecord { Status = "Failed" }, null, true, true, DateTime.Now);
-            Assert.True(failed.Has(CtxAction.Sync)); Assert.False(failed.Has(CtxAction.GenerateEInv));
+            var s = CtxStateCalculator.Compute(null, false, true, true, DateTime.Now);
+            Assert.True(s.Has(CtxAction.History)); Assert.False(s.Has(CtxAction.ValidateGst)); Assert.False(s.Has(CtxAction.GenerateEInv));
         }
 
         [Fact]
-        public void Draft_invoice_offers_submit_but_not_generation()
+        public void Before_the_first_status_read_only_validation_sync_and_refresh_are_offered()
         {
-            var s = CtxStateCalculator.Compute(Synced(), St(docstatus: 0), true, true, DateTime.Now);
-            Assert.True(s.Has(CtxAction.Submit)); Assert.True(s.Has(CtxAction.ViewErp));
-            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.False(s.Has(CtxAction.GenerateEwb)); Assert.False(s.Has(CtxAction.ViewIrn));
+            var s = CtxStateCalculator.Compute(null, true, true, true, DateTime.Now);
+            foreach (var a in new[] { CtxAction.ValidateGst, CtxAction.SyncGst, CtxAction.RefreshGst, CtxAction.RefreshIrn, CtxAction.RefreshEwb, CtxAction.History }) Assert.True(s.Has(a), a.ToString());
+            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.False(s.Has(CtxAction.GenerateEwb));
         }
 
         [Fact]
-        public void Submitted_invoice_without_irn_enables_validate_and_generate_and_hides_irn_views()
+        public void Invoice_without_irn_enables_validate_and_generate_and_hides_irn_views()
         {
-            var s = CtxStateCalculator.Compute(Synced(), St(), true, true, DateTime.Now);
-            Assert.False(s.Has(CtxAction.Submit));
+            var s = CtxStateCalculator.Compute(St(), true, true, true, DateTime.Now);
             Assert.True(s.Has(CtxAction.ValidateEInv)); Assert.True(s.Has(CtxAction.GenerateEInv));
-            Assert.False(s.Has(CtxAction.ViewIrn)); Assert.False(s.Has(CtxAction.ViewQr)); Assert.False(s.Has(CtxAction.CancelEInv));
+            foreach (var a in new[] { CtxAction.ViewIrn, CtxAction.ViewAck, CtxAction.ViewQr, CtxAction.DownloadSigned, CtxAction.PrintEInv, CtxAction.CancelEInv }) Assert.False(s.Has(a), a.ToString());
             Assert.True(s.Has(CtxAction.ValidateEwb)); Assert.True(s.Has(CtxAction.GenerateEwb));
         }
 
@@ -144,10 +140,10 @@ namespace EInvGstAddon.Tests
         public void Existing_irn_blocks_generation_and_enables_irn_actions_and_cancel_only_within_24h()
         {
             var now = DateTime.Now;
-            var s = CtxStateCalculator.Compute(Synced(), St(irn: "IRN1", ack: now.AddHours(-2)), true, true, now);
+            var s = CtxStateCalculator.Compute(St(irn: "IRN1", ack: now.AddHours(-2)), true, true, true, now);
             Assert.False(s.Has(CtxAction.GenerateEInv));
-            foreach (var a in new[] { CtxAction.ViewIrn, CtxAction.ViewQr, CtxAction.DownloadSigned, CtxAction.PrintEInv, CtxAction.RefreshIrn, CtxAction.CancelEInv }) Assert.True(s.Has(a), a.ToString());
-            var old = CtxStateCalculator.Compute(Synced(), St(irn: "IRN1", ack: now.AddHours(-30)), true, true, now);
+            foreach (var a in new[] { CtxAction.ViewIrn, CtxAction.ViewAck, CtxAction.ViewQr, CtxAction.DownloadSigned, CtxAction.PrintEInv, CtxAction.RefreshIrn, CtxAction.CancelEInv }) Assert.True(s.Has(a), a.ToString());
+            var old = CtxStateCalculator.Compute(St(irn: "IRN1", ack: now.AddHours(-30)), true, true, true, now);
             Assert.False(old.Has(CtxAction.CancelEInv)); Assert.True(old.Has(CtxAction.ViewIrn));
         }
 
@@ -155,28 +151,36 @@ namespace EInvGstAddon.Tests
         public void Existing_ewaybill_blocks_generation_and_enables_update_and_cancel_when_eligible()
         {
             var now = DateTime.Now;
-            var s = CtxStateCalculator.Compute(Synced(), St(ewb: "3410001", ewbDate: now.AddHours(-1), valid: now.AddDays(1)), true, true, now);
+            var s = CtxStateCalculator.Compute(St(ewb: "3410001", ewbDate: now.AddHours(-1), valid: now.AddDays(1)), true, true, true, now);
             Assert.False(s.Has(CtxAction.GenerateEwb));
             foreach (var a in new[] { CtxAction.ViewEwb, CtxAction.UpdateVehicle, CtxAction.UpdateTransporter, CtxAction.DownloadEwb, CtxAction.PrintEwb, CtxAction.RefreshEwb, CtxAction.CancelEwb }) Assert.True(s.Has(a), a.ToString());
-            var expired = CtxStateCalculator.Compute(Synced(), St(ewb: "3410001", ewbDate: now.AddDays(-3), valid: now.AddDays(-1)), true, true, now);
+            var expired = CtxStateCalculator.Compute(St(ewb: "3410001", ewbDate: now.AddDays(-3), valid: now.AddDays(-1)), true, true, true, now);
             Assert.False(expired.Has(CtxAction.UpdateVehicle)); Assert.False(expired.Has(CtxAction.CancelEwb)); Assert.True(expired.Has(CtxAction.ViewEwb));
         }
 
         [Fact]
-        public void Gst_disabled_in_configuration_disables_generation_but_keeps_erpnext_actions()
+        public void Gst_disabled_in_configuration_disables_generation_but_keeps_validation_and_refresh()
         {
-            var s = CtxStateCalculator.Compute(Synced(), St(docstatus: 0), false, false, DateTime.Now);
-            Assert.True(s.Has(CtxAction.Submit)); Assert.True(s.Has(CtxAction.ViewErp));
-            var sub = CtxStateCalculator.Compute(Synced(), St(), false, false, DateTime.Now);
-            Assert.False(sub.Has(CtxAction.GenerateEInv)); Assert.False(sub.Has(CtxAction.GenerateEwb)); Assert.False(sub.Has(CtxAction.ValidateEInv));
-            Assert.Contains("not enabled", sub.Note);
+            var s = CtxStateCalculator.Compute(St(), true, false, false, DateTime.Now);
+            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.False(s.Has(CtxAction.GenerateEwb)); Assert.False(s.Has(CtxAction.ValidateEInv));
+            Assert.True(s.Has(CtxAction.ValidateGst)); Assert.True(s.Has(CtxAction.RefreshGst));
+            Assert.Contains("not enabled", s.Note);
         }
 
         [Fact]
-        public void Cancelled_erpnext_invoice_offers_no_generation()
+        public void Unknown_outcome_blocks_generation_until_reconciled()
         {
-            var s = CtxStateCalculator.Compute(Synced(), St(docstatus: 2), true, true, DateTime.Now);
-            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.False(s.Has(CtxAction.GenerateEwb)); Assert.False(s.Has(CtxAction.Submit)); Assert.False(s.Has(CtxAction.ValidateEInv));
+            var s = CtxStateCalculator.Compute(St(einvUnknown: true, ewbUnknown: true), true, true, true, DateTime.Now);
+            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.False(s.Has(CtxAction.GenerateEwb));
+            Assert.True(s.Has(CtxAction.SyncGst)); Assert.True(s.Has(CtxAction.ValidateEInv));
+            Assert.Contains("UNKNOWN", s.Note);
+        }
+
+        [Fact]
+        public void Cancelled_irn_offers_views_only_and_never_regeneration()
+        {
+            var s = CtxStateCalculator.Compute(St(irnCancelled: true), true, true, true, DateTime.Now);
+            Assert.False(s.Has(CtxAction.GenerateEInv)); Assert.True(s.Has(CtxAction.ViewIrn)); Assert.True(s.Has(CtxAction.ViewAck));
         }
 
         [Fact]
@@ -191,7 +195,7 @@ namespace EInvGstAddon.Tests
         }
     }
 
-    /// <summary>Validation reports (read-only) and the uncertain-result / duplicate rules the right-click actions rely on. Mock ERPNext only.</summary>
+    /// <summary>LEGACY (v1.x, Sales-Invoice based GstService): kept so the earlier tests keep passing. The 2.0 add-on does not use this class.</summary>
     public class ContextActionBackendTests
     {
         private const string Gstin = "27AABCV1234F1Z5", Buyer = "29AAACB5678K1Z9";

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using EInvGstAddon.Common;
 using EInvGstAddon.Core;
@@ -139,6 +140,32 @@ namespace EInvGstAddon.Tests
                     new object[] { new object[] { "custom_sap_database", "=", "Vipra" }, new object[] { "custom_sap_docentry", ">=", from.ToString() } }, 50);
                 foreach (var x in l) _out.WriteLine(x.ToString(Newtonsoft.Json.Formatting.None));
                 _out.WriteLine("count=" + l.Count);
+            }
+        }
+    }
+}
+
+namespace EInvGstAddon.Tests
+{
+    /// <summary>Reads REAL invoices of the local SAP database (read-only) and writes the GST JSON the add-on would send. Nothing is sent anywhere.</summary>
+    public class LiveBuilderDump
+    {
+        [Fact]
+        public void Dump_gst_json_for_selected_invoices()
+        {
+            if (Environment.GetEnvironmentVariable("EINV_LIVE") != "1") return;
+            var ids = (Environment.GetEnvironmentVariable("EINV_DOCENTRIES") ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();
+            string outDir = Environment.GetEnvironmentVariable("EINV_OUT"); if (string.IsNullOrEmpty(outDir) || ids.Count == 0) return;
+            Directory.CreateDirectory(outDir);
+            var sap = new SapReader(new SqlClientRunner("Server=localhost;Database=Vipra;Integrated Security=true;TrustServerCertificate=true"), "Vipra");
+            var cfg = new AppConfig { IntegrationId = "TEST_INT", SapDatabase = "Vipra", Environment = "Sandbox", SupplierGstin = "27AABCT1234F1ZX", LegalName = "Fictional Seller Ltd", GstAddress = "1 Test Road", GstCity = "Thane", StateCode = "27", GstPin = "400601", DocNumberPattern = "{SeriesName}/{DocNum}" };
+            cfg.CurrencyMap["`"] = "INR";
+            foreach (var id in ids)
+            {
+                var src = sap.GetGstSource(id);
+                var r = InvoiceJsonBuilder.Build(src, cfg);
+                File.WriteAllText(Path.Combine(outDir, "inv-" + id + ".json"), r.Json == null ? "{}" : r.Json.ToString());
+                File.WriteAllText(Path.Combine(outDir, "inv-" + id + ".build.txt"), string.Join("\n", r.Errors) + "\n" + string.Join("\n", r.Notes));
             }
         }
     }

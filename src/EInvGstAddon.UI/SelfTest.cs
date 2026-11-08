@@ -24,17 +24,17 @@ namespace EInvGstAddon.UI
                 var host = new SapMenuHost(con.App);
                 var builder = new CtxMenuBuilder(host);
                 var all = new CtxState(); foreach (var i in CtxMenuDefinition.Items) all.Enabled.Add(i.Action);
-                var some = new CtxState(); some.Enabled.Add(CtxAction.Sync);
+                var some = new CtxState(); some.Enabled.Add(CtxAction.ValidateGst);
 
                 builder.Hide();
                 check("start clean: root absent", !host.Exists(CtxMenuDefinition.RootId));
                 builder.Show(all);
                 check("root popup created under SAP menu " + CtxMenuDefinition.ParentMenuId, host.Exists(CtxMenuDefinition.RootId));
                 check("3 group popups exist", CtxMenuDefinition.Groups.All(g => host.Exists(CtxMenuDefinition.GroupId(g))));
-                check("all 21 action items exist", CtxMenuDefinition.Items.All(i => host.Exists(i.Id)));
+                check("all 22 action items exist", CtxMenuDefinition.Items.All(i => host.Exists(i.Id)));
                 for (int n = 0; n < 4; n++) builder.Show(some);                     // repeated right-clicks
                 check("repeated Show: still all items, no exception", CtxMenuDefinition.Items.All(i => host.Exists(i.Id)));
-                var syncItem = con.App.Menus.Item(CtxMenuDefinition.Items.First(i => i.Action == CtxAction.Sync).Id);
+                var syncItem = con.App.Menus.Item(CtxMenuDefinition.Items.First(i => i.Action == CtxAction.ValidateGst).Id);
                 var genItem = con.App.Menus.Item(CtxMenuDefinition.Items.First(i => i.Action == CtxAction.GenerateEInv).Id);
                 check("enabled flag applied (Sync enabled)", syncItem.Enabled);
                 check("enabled flag applied (Generate E-Invoice disabled)", !genItem.Enabled);

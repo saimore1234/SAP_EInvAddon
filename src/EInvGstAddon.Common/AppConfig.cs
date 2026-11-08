@@ -25,6 +25,9 @@ namespace EInvGstAddon.Common
         /// <summary>false only for the configuration migrated from the Phase 1 single-company file (keeps its existing references valid).</summary>
         public bool ReferenceIncludesConfigId { get; set; } = true;
 
+        /// <summary>Name of the "SAP Integration Profile" on the ERPNext site. Every GST request carries it; the server checks it against the API user, SAP database and seller GSTIN.</summary>
+        public string IntegrationId { get; set; } = "";
+
         // ----- connection -----
         public string SapDatabase { get; set; } = "";
         public string ErpUrl { get; set; } = "";
@@ -83,6 +86,22 @@ namespace EInvGstAddon.Common
         /// <summary>Not configured / Configured (set by the GST validation, never assumed).</summary>
         public string GspStatus { get; set; } = "Not validated";
 
+        // ----- GST invoice JSON mapping (nothing customer specific is preset) -----
+        public string GstCity { get; set; } = "";
+        /// <summary>Tokens: {SeriesName} {DocNum} {DocEntry}. The IRP accepts at most 16 characters (letters, digits, '/' and '-').</summary>
+        public string DocNumberPattern { get; set; } = "{DocNum}";
+        /// <summary>SAP tax type (INV4.staType) -> cgst | sgst | igst | cess. -100/-110/-120 are the standard SAP India GST tax types.</summary>
+        public Dictionary<string, string> GstTaxTypeMap { get; set; } = new Dictionary<string, string> { { "-100", "cgst" }, { "-110", "sgst" }, { "-120", "igst" } };
+        /// <summary>SAP tax types reported as "other charges" (for example TCS collected at source).</summary>
+        public List<string> OtherChargeTaxTypes { get; set; } = new List<string>();
+        /// <summary>SAP unit of measure -> GST unit code (UQC). Units that are not mapped are sent unchanged and rejected by the server, never replaced.</summary>
+        public Dictionary<string, string> UqcMap { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>SAP state abbreviation -> GST state code, for states the built-in table does not cover.</summary>
+        public Dictionary<string, string> StateCodeMap { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public string FreightSac { get; set; } = "";
+        public bool ExportWithPayment { get; set; } = false;
+        public string ExportPortCode { get; set; } = "";
+
         // ----- authorization (SAP user codes; SAP superusers are always allowed to administer) -----
         public List<string> AdminUsers { get; set; } = new List<string>();
         /// <summary>SAP users allowed to run GST actions (generate / cancel). Empty = every SAP user of this company.</summary>
@@ -121,14 +140,17 @@ namespace EInvGstAddon.Common
         [JsonIgnore]
         public bool GstReady { get { return !string.IsNullOrWhiteSpace(SupplierGstin) && GspStatus == "Configured"; } }
 
-        /// <summary>Company-level isolation: the target must be configured and must not be a protected company.</summary>
+        /// <summary>
+        /// The configuration must identify its SAP database and its server-side integration profile. The ERPNext company is optional (informational):
+        /// the GST API needs no ERPNext company, because no ERPNext accounting document is ever created. Protected companies are still refused if one is set.
+        /// </summary>
         public void ValidateTarget()
         {
-            string c = (ErpCompany ?? "").Trim(), a = (ErpAbbr ?? "").Trim();
-            if (c.Length == 0 || a.Length == 0) throw new InvalidOperationException("ERPNext company and abbreviation must be configured.");
-            if (ProtectedCompanies.Any(p => string.Equals(p, c, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Safety stop: '" + c + "' is listed as a protected company and cannot be the target of this configuration.");
+            string c = (ErpCompany ?? "").Trim();
             if (string.IsNullOrWhiteSpace(SapDatabase)) throw new InvalidOperationException("The SAP company database must be configured.");
+            if (string.IsNullOrWhiteSpace(IntegrationId)) throw new InvalidOperationException("The integration ID (ERPNext 'SAP Integration Profile') must be configured.");
+            if (c.Length > 0 && ProtectedCompanies.Any(p => string.Equals(p, c, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Safety stop: '" + c + "' is listed as a protected company and cannot be the target of this configuration.");
         }
 
         public string MapCurrency(string sapCode)
@@ -191,6 +213,7 @@ namespace EInvGstAddon.Common
             foreach (var p in file.Profiles)
             {
                 if (string.IsNullOrEmpty(p.Id)) p.Id = AppConfig.NewId();
+                if (string.IsNullOrEmpty(p.IntegrationId) && !string.IsNullOrEmpty(p.SapDatabase)) p.IntegrationId = "SAPB1_" + System.Text.RegularExpressions.Regex.Replace(p.SapDatabase, "[^A-Za-z0-9]", "_").ToUpperInvariant();
                 Logger.RegisterSecret(p.ApiSecret); Logger.RegisterSecret(p.ApiKey);
             }
             return file;

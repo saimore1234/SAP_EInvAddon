@@ -1,3 +1,11 @@
+# EInvGstAddon 2.0 - SAP Business One -> ERPNext GST API (no ERPNext invoices)
+
+**2.0 architecture:** SAP B1 A/R Invoice -> add-on (C#, DI API) -> ERPNext GST API (Frappe app `sap_b1_direct_integration`) -> GSP/IRP -> IRN / signed QR / e-Way Bill -> back to SAP UDFs/UDT.
+No ERPNext Sales Invoice, Customer, Item, stock or accounting entry is created; ERPNext keeps only a minimal GST transaction record. See docs/SALES_INVOICE_DEPENDENCIES.md, docs/API.md, docs/INDIA_COMPLIANCE_REUSE.md, docs/DEPLOYMENT_V2.md, docs/SANDBOX_TESTING.md, docs/PRODUCTION_CHECKLIST.md, docs/TEST_REPORT_V2.md.
+**Status:** no real IRN / e-Way Bill has been generated yet - sandbox verification is pending (see TEST_REPORT_V2.md).
+
+The sections below describe release 1.x (Sales-Invoice based) and are kept for history.
+
 # EInvGstAddon – Phase 1: SAP Business One (Vipra) → ERPNext (VCPL) invoice synchronisation
 
 Direct integration, no portal and no middleware:

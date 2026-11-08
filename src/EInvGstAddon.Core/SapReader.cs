@@ -202,6 +202,55 @@ namespace EInvGstAddon.Core
 
         public Dictionary<string, object> Query1(string sql) { return One(sql); }
 
+        // ---------- GST source (everything the GST invoice JSON needs; read-only) ----------
+        public GstSource GetGstSource(int docEntry)
+        {
+            var h = One("SELECT i.DocEntry,i.DocNum,i.Series,n.SeriesName,i.ObjType,i.DocType,i.CANCELED,i.CardCode,i.CardName,i.DocDate,i.DocDueDate,i.DocCur,i.DocRate,i.GSTTranTyp,i.NumAtCard,i.PayToCode,i.ShipToCode,i.ShipState," +
+                        "i.DiscPrcnt,i.DiscSum,i.TotalExpns,i.RoundDif,i.DocTotal,i.DocTotalFC FROM OINV i LEFT JOIN NNM1 n ON n.Series=i.Series WHERE i.DocEntry=" + docEntry);
+            if (h == null) throw new InvalidOperationException("SAP A/R Invoice with DocEntry " + docEntry + " was not found.");
+            var s = new GstSource
+            {
+                DocEntry = I(h, "DocEntry"), DocNum = I(h, "DocNum"), Series = I(h, "Series"), SeriesName = S(h, "SeriesName"), ObjType = S(h, "ObjType"), DocType = S(h, "DocType"), Database = DatabaseName,
+                Cancelled = S(h, "CANCELED") != "N", CardCode = S(h, "CardCode"), CardName = S(h, "CardName"), PostingDate = Dt(h, "DocDate"), DueDate = Dt(h, "DocDueDate"), DocCurrency = S(h, "DocCur"),
+                ExchangeRate = D(h, "DocRate") <= 0 ? 1 : D(h, "DocRate"), GstTransactionType = S(h, "GSTTranTyp"), CustomerRef = S(h, "NumAtCard"), PayToCode = S(h, "PayToCode"), ShipToCode = S(h, "ShipToCode"), ShipStateCode = S(h, "ShipState"),
+                HeaderDiscountPercent = D(h, "DiscPrcnt"), HeaderDiscountLc = D(h, "DiscSum"), FreightLc = D(h, "TotalExpns"), RoundOffLc = D(h, "RoundDif"), DocTotalLc = D(h, "DocTotal"), DocTotalFc = D(h, "DocTotalFC")
+            };
+            s.ForeignCurrency = !string.Equals(s.DocCurrency, LocalCurrency, StringComparison.OrdinalIgnoreCase);
+
+            s.Buyer = ReadParty(s.CardCode, s.PayToCode, "B");
+            s.Buyer.Code = s.CardCode; if (string.IsNullOrEmpty(s.Buyer.Name)) s.Buyer.Name = s.CardName;
+            if (!string.IsNullOrEmpty(s.ShipToCode) && s.ShipToCode != s.PayToCode)
+            {
+                s.ShipTo = ReadParty(s.CardCode, s.ShipToCode, "S"); s.ShipTo.Name = s.ShipTo.Name ?? s.CardName;
+                if (string.IsNullOrEmpty(s.ShipTo.Name)) s.ShipTo.Name = s.CardName;
+            }
+
+            foreach (var r in _sql.Query("SELECT l.LineNum,l.ItemCode,l.Dscription,l.unitMsr,l.Quantity,l.Price,l.PriceBefDi,l.DiscPrcnt,l.LineTotal,h.ChapterID AS Hsn,sc.ServCode AS Sac " +
+                                         "FROM INV1 l LEFT JOIN OCHP h ON h.AbsEntry=l.HsnEntry LEFT JOIN OSAC sc ON sc.AbsEntry=l.SacEntry WHERE l.DocEntry=" + docEntry + " AND ISNULL(l.TreeType,'N')<>'I' ORDER BY l.LineNum"))
+                s.Lines.Add(new GstLine { LineNum = I(r, "LineNum"), ItemCode = S(r, "ItemCode"), Description = S(r, "Dscription"), Uom = S(r, "unitMsr"), Quantity = D(r, "Quantity"), UnitPrice = D(r, "PriceBefDi") != 0 ? D(r, "PriceBefDi") : D(r, "Price"),
+                    DiscountPercent = D(r, "DiscPrcnt"), LineTotalLc = D(r, "LineTotal"), Hsn = NormaliseHsn(S(r, "Hsn")), Sac = S(r, "Sac") });
+            foreach (var r in _sql.Query("SELECT LineNum,RelateType,staType,StaCode,TaxRate,TaxSum,BaseSum FROM INV4 WHERE DocEntry=" + docEntry))
+                s.Taxes.Add(new GstTaxRow { LineNum = I(r, "LineNum"), RelateType = I(r, "RelateType"), TaxType = S(r, "staType"), TaxCode = S(r, "StaCode"), Rate = D(r, "TaxRate"), AmountLc = D(r, "TaxSum"), BaseLc = D(r, "BaseSum") });
+            foreach (var r in _sql.Query("SELECT e.ExpnsCode,x.ExpnsName,e.LineTotal FROM INV3 e LEFT JOIN OEXD x ON x.ExpnsCode=e.ExpnsCode WHERE e.DocEntry=" + docEntry))
+                s.Expenses.Add(new GstExpense { ExpenseCode = I(r, "ExpnsCode"), Name = S(r, "ExpnsName"), AmountLc = D(r, "LineTotal") });
+            return s;
+        }
+
+        private GstParty ReadParty(string cardCode, string addressCode, string type)
+        {
+            var p = new GstParty();
+            var r = One("SELECT a.Address,a.Street,a.Block,a.Building,a.StreetNo,a.City,a.ZipCode,a.State,a.Country,a.Address2,a.GSTRegnNo,cy.ISO2Code FROM CRD1 a LEFT JOIN OCRY cy ON cy.Code=a.Country " +
+                        "WHERE a.CardCode=" + Lit(cardCode) + " AND a.Address=" + Lit(addressCode) + " AND a.AdresType=" + Lit(type));
+            if (r == null) return p;
+            string g = S(r, "GSTRegnNo").ToUpperInvariant();
+            p.Name = null; p.Street = S(r, "Street"); p.Block = S(r, "Block"); p.Building = S(r, "Building"); p.StreetNo = S(r, "StreetNo"); p.Address2 = S(r, "Address2"); p.City = S(r, "City"); p.ZipCode = S(r, "ZipCode");
+            p.StateCode = S(r, "State"); p.CountryCode = S(r, "Country"); p.CountryIso2 = !string.IsNullOrEmpty(S(r, "ISO2Code")) ? S(r, "ISO2Code") : (S(r, "Country").Length == 2 ? S(r, "Country") : "");
+            // (SAP country codes are ISO alpha-2 when OCRY.ISO2Code is not filled)
+            p.Gstin = Regex.IsMatch(g, @"^[0-9]{2}[A-Z0-9]{10}[0-9A-Z]{3}$") ? g : "";
+            var n = One("SELECT CardName FROM OCRD WHERE CardCode=" + Lit(cardCode)); if (n != null) p.Name = S(n, "CardName");
+            return p;
+        }
+
         public int GetMaxDocEntry()
         {
             var r = One("SELECT ISNULL(MAX(DocEntry),0) AS M FROM OINV");

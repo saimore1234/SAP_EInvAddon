@@ -29,6 +29,11 @@ namespace EInvGstAddon.Common
         public const string UdfEwbDate = "EWBDate";
         public const string UdfEwbValid = "EWBValid";
         public const string UdfCancelStatus = "CancelStatus";
+        public const string UdfGstStatus = "GSTStatus";
+        public const string UdfGstSyncDate = "GSTSyncDate";
+        public const string UdfGstError = "GSTError";
+        public const string UdfErpRequestId = "ERPRequestID";
+        public const string UdtTxn = "EINV_TXN";
     }
 
     public static class SyncStatus

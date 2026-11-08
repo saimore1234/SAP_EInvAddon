@@ -9,7 +9,7 @@ namespace EInvGstAddon.Tests
         {
             var c = new AppConfig
             {
-                Id = "t1", Name = "Test", SapDatabase = "Vipra", ErpUrl = "https://erp.example.test", ApiKey = "key123456",
+                Id = "t1", Name = "Test", IntegrationId = "TESTINT", SapDatabase = "Vipra", ErpUrl = "https://erp.example.test", ApiKey = "key123456",
                 ErpCompany = "Vipra Closures Private Limited", ErpAbbr = "VCPL", ReferenceIncludesConfigId = false,
                 FreightAccount = "Freight and Forwarding Charges - VCPL", RoundOffAccount = "Rounded Off - VCPL", SalesInvoiceSeries = "VCPL-SINV-.YYYY.-.#####",
                 DefaultCustomerGroup = "Commercial", DefaultItemGroup = "Products"

@@ -10,6 +10,8 @@ namespace EInvGstAddon.Core
         public int DocStatus;
         public DateTime? PostingDate;
         public decimal NetTotal, TaxTotal, GrandTotal;
+        public bool EInvoiceUnknown, EwbUnknown;     // server reported "Unknown / Reconciliation Required"
+        public string LastMessage;
 
         // e-Invoice
         public string Irn, EInvoiceStatus, AckNo, SignedQr, SignedInvoice;
@@ -56,9 +58,19 @@ namespace EInvGstAddon.Core
         public DateTime? LastSync;
     }
 
+    /// <summary>One GST operation in the SAP-side integration history (@EINV_TXN).</summary>
+    public sealed class GstHistory
+    {
+        public int DocEntry;
+        public string Operation, Status, RequestId, Reference, Message;
+        public DateTime At;
+    }
+
     public interface IGstStore
     {
         GstRecord GetGst(int docEntry);
         void SaveGst(GstRecord rec);
+        void AddHistory(GstHistory h);
+        System.Collections.Generic.List<GstHistory> ListHistory(int docEntry, int max);
     }
 }

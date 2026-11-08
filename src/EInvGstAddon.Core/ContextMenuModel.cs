@@ -10,8 +10,11 @@ namespace EInvGstAddon.Core
 
     public enum CtxAction
     {
-        Sync, Submit, ViewErp, History,
-        ValidateEInv, GenerateEInv, ViewIrn, ViewQr, DownloadSigned, PrintEInv, RefreshIrn, CancelEInv,
+        // ERPNext / GST API
+        ValidateGst, SyncGst, History, RefreshGst,
+        // E-Invoice
+        ValidateEInv, GenerateEInv, ViewIrn, ViewAck, ViewQr, DownloadSigned, PrintEInv, RefreshIrn, CancelEInv,
+        // E-Way Bill
         ValidateEwb, GenerateEwb, ViewEwb, UpdateVehicle, UpdateTransporter, DownloadEwb, PrintEwb, RefreshEwb, CancelEwb
     }
 
@@ -33,17 +36,16 @@ namespace EInvGstAddon.Core
 
         public static readonly List<CtxItem> Items = new List<CtxItem>
         {
-            I(CtxAction.Sync, "Synchronize with ERPNext", "ERPNext"), I(CtxAction.Submit, "Submit Invoice in ERPNext", "ERPNext"),
-            I(CtxAction.ViewErp, "View ERPNext Invoice", "ERPNext"), I(CtxAction.History, "View Integration History", "ERPNext"),
+            I(CtxAction.ValidateGst, "Validate GST Invoice", "ERPNext"), I(CtxAction.SyncGst, "Synchronize GST Data / Send Request", "ERPNext"),
+            I(CtxAction.History, "View Integration History", "ERPNext"), I(CtxAction.RefreshGst, "Refresh GST Status", "ERPNext"),
             I(CtxAction.ValidateEInv, "Validate E-Invoice", "E-Invoice"), I(CtxAction.GenerateEInv, "Generate E-Invoice", "E-Invoice"),
-            I(CtxAction.ViewIrn, "View IRN Details", "E-Invoice"), I(CtxAction.ViewQr, "View Signed QR Code", "E-Invoice"),
-            I(CtxAction.DownloadSigned, "Download Signed Invoice", "E-Invoice"), I(CtxAction.PrintEInv, "Print E-Invoice", "E-Invoice"),
+            I(CtxAction.ViewIrn, "View IRN", "E-Invoice"), I(CtxAction.ViewAck, "View Acknowledgement", "E-Invoice"), I(CtxAction.ViewQr, "View QR Code", "E-Invoice"),
+            I(CtxAction.DownloadSigned, "Download Signed Data", "E-Invoice"), I(CtxAction.PrintEInv, "Print", "E-Invoice"),
             I(CtxAction.RefreshIrn, "Refresh IRN Status", "E-Invoice"), I(CtxAction.CancelEInv, "Cancel E-Invoice", "E-Invoice"),
             I(CtxAction.ValidateEwb, "Validate E-Way Bill", "E-Way Bill"), I(CtxAction.GenerateEwb, "Generate E-Way Bill", "E-Way Bill"),
-            I(CtxAction.ViewEwb, "View E-Way Bill Details", "E-Way Bill"), I(CtxAction.UpdateVehicle, "Update Vehicle Number", "E-Way Bill"),
-            I(CtxAction.UpdateTransporter, "Update Transporter", "E-Way Bill"), I(CtxAction.DownloadEwb, "Download E-Way Bill", "E-Way Bill"),
-            I(CtxAction.PrintEwb, "Print E-Way Bill", "E-Way Bill"), I(CtxAction.RefreshEwb, "Refresh E-Way Bill Status", "E-Way Bill"),
-            I(CtxAction.CancelEwb, "Cancel E-Way Bill", "E-Way Bill")
+            I(CtxAction.ViewEwb, "View EWB Details", "E-Way Bill"), I(CtxAction.UpdateVehicle, "Update Vehicle", "E-Way Bill"),
+            I(CtxAction.UpdateTransporter, "Update Transporter", "E-Way Bill"), I(CtxAction.DownloadEwb, "Download", "E-Way Bill"),
+            I(CtxAction.PrintEwb, "Print", "E-Way Bill"), I(CtxAction.RefreshEwb, "Refresh EWB Status", "E-Way Bill"), I(CtxAction.CancelEwb, "Cancel EWB", "E-Way Bill")
         };
 
         private static CtxItem I(CtxAction a, string caption, string group) { return new CtxItem { Action = a, Caption = caption, Group = group, Id = IdPrefix + a.ToString().ToUpperInvariant() }; }
@@ -67,37 +69,37 @@ namespace EInvGstAddon.Core
     public static class CtxStateCalculator
     {
         /// <summary>
-        /// Enabled/disabled logic. Inputs are the latest KNOWN state (SAP sync record + the most recent ERPNext status read in the background);
-        /// every action re-reads ERPNext live and re-checks before it does anything, so a stale menu can never cause a wrong GST action.
+        /// Enabled/disabled logic from the LAST KNOWN GST state (read from the ERPNext GST API in the background). Every action re-reads the server
+        /// state and re-validates before it does anything, so a stale menu can never cause a wrong GST action. There is no ERPNext invoice to "submit":
+        /// the SAP invoice is the only source document.
         /// </summary>
-        public static CtxState Compute(SyncRecord sync, GstStatus st, bool eInvoiceEnabled, bool eWayBillEnabled, DateTime now)
+        public static CtxState Compute(GstStatus st, bool configured, bool eInvoiceEnabled, bool eWayBillEnabled, DateTime now)
         {
             var s = new CtxState();
-            bool synced = sync != null && sync.Status == "Synced" && !string.IsNullOrEmpty(sync.ErpInvoice);
-            if (sync == null || sync.Status != "Processing") s.Enabled.Add(CtxAction.Sync);        // sync / retry is idempotent
             s.Enabled.Add(CtxAction.History);
-            if (!synced) { s.Note = "Not synchronized with ERPNext: GST actions are disabled."; return s; }
+            if (!configured) { s.Note = "No active GST configuration for this SAP company."; return s; }
+            s.Enabled.Add(CtxAction.ValidateGst); s.Enabled.Add(CtxAction.SyncGst); s.Enabled.Add(CtxAction.RefreshGst);
+            s.Enabled.Add(CtxAction.RefreshIrn); s.Enabled.Add(CtxAction.RefreshEwb);              // read-only status reads
+            if (st == null) { s.Note = "GST status not read yet; reading in the background (right-click again)."; return s; }
 
-            s.Enabled.Add(CtxAction.ViewErp);
-            // Refresh is always possible for a synchronized invoice (it only READS ERPNext)
-            s.Enabled.Add(CtxAction.RefreshIrn); s.Enabled.Add(CtxAction.RefreshEwb);
-            if (st == null) { s.Note = "ERPNext status not read yet; reading in the background (right-click again)."; return s; }
-
-            if (st.DocStatus == 0) s.Enabled.Add(CtxAction.Submit);
-            bool submitted = st.DocStatus == 1;
-
-            // E-Invoice
-            if (submitted && !st.HasIrn && eInvoiceEnabled) { s.Enabled.Add(CtxAction.ValidateEInv); s.Enabled.Add(CtxAction.GenerateEInv); }
-            else if (st.DocStatus != 2 && eInvoiceEnabled) s.Enabled.Add(CtxAction.ValidateEInv);      // validation also explains why not (e.g. Draft / existing IRN)
+            // ---- e-Invoice
+            if (eInvoiceEnabled)
+            {
+                if (!st.HasIrn && !st.IrnCancelled) { s.Enabled.Add(CtxAction.ValidateEInv); if (!st.EInvoiceUnknown) s.Enabled.Add(CtxAction.GenerateEInv); }
+                else if (st.HasIrn) s.Enabled.Add(CtxAction.ValidateEInv);
+            }
             if (st.HasIrn)
             {
-                s.Enabled.Add(CtxAction.ViewIrn); s.Enabled.Add(CtxAction.ViewQr); s.Enabled.Add(CtxAction.DownloadSigned); s.Enabled.Add(CtxAction.PrintEInv);
+                s.Enabled.Add(CtxAction.ViewIrn); s.Enabled.Add(CtxAction.ViewAck); s.Enabled.Add(CtxAction.ViewQr); s.Enabled.Add(CtxAction.DownloadSigned); s.Enabled.Add(CtxAction.PrintEInv);
                 if (eInvoiceEnabled && st.AckDate.HasValue && st.AckDate.Value.AddDays(1) >= now) s.Enabled.Add(CtxAction.CancelEInv);
             }
-            else if (st.IrnCancelled) s.Enabled.Add(CtxAction.ViewIrn);
+            else if (st.IrnCancelled) { s.Enabled.Add(CtxAction.ViewIrn); s.Enabled.Add(CtxAction.ViewAck); }
 
-            // E-Way Bill
-            if (submitted && !st.HasEwb && eWayBillEnabled) { s.Enabled.Add(CtxAction.ValidateEwb); s.Enabled.Add(CtxAction.GenerateEwb); }
+            // ---- e-Way Bill
+            if (eWayBillEnabled && !st.HasEwb && !st.EwbCancelled)
+            {
+                s.Enabled.Add(CtxAction.ValidateEwb); if (!st.EwbUnknown) s.Enabled.Add(CtxAction.GenerateEwb);
+            }
             if (st.HasEwb)
             {
                 s.Enabled.Add(CtxAction.ViewEwb); s.Enabled.Add(CtxAction.DownloadEwb); s.Enabled.Add(CtxAction.PrintEwb);
@@ -107,6 +109,7 @@ namespace EInvGstAddon.Core
             }
             else if (st.EwbCancelled) s.Enabled.Add(CtxAction.ViewEwb);
             if (!eInvoiceEnabled && !eWayBillEnabled) s.Note = "GST is not enabled for this configuration (GST Configuration screen).";
+            else if (st.EInvoiceUnknown || st.EwbUnknown) s.Note = "A previous request has an UNKNOWN outcome: use Synchronize GST Data to reconcile before generating again.";
             return s;
         }
     }

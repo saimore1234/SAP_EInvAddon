@@ -44,5 +44,9 @@ namespace EInvGstAddon.Core
         private readonly System.Collections.Generic.Dictionary<int, GstRecord> _d = new System.Collections.Generic.Dictionary<int, GstRecord>();
         public GstRecord GetGst(int docEntry) { lock (_d) { GstRecord r; return _d.TryGetValue(docEntry, out r) ? r : null; } }
         public void SaveGst(GstRecord rec) { lock (_d) _d[rec.DocEntry] = rec; }
+        private readonly System.Collections.Generic.List<GstHistory> _h = new System.Collections.Generic.List<GstHistory>();
+        public void AddHistory(GstHistory h) { lock (_h) _h.Add(h); }
+        public System.Collections.Generic.List<GstHistory> ListHistory(int docEntry, int max)
+        { lock (_h) return System.Linq.Enumerable.ToList(System.Linq.Enumerable.Take(System.Linq.Enumerable.OrderByDescending(System.Linq.Enumerable.Where(_h, x => x.DocEntry == docEntry), x => x.At), max)); }
     }
 }

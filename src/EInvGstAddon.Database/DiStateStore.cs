@@ -258,11 +258,49 @@ namespace EInvGstAddon.Database
                 f.Item("U_" + Constants.UdfEwbStatus).Value = Trunc(g.EwbStatus, 20); f.Item("U_" + Constants.UdfEwbNo).Value = Trunc(g.EwbNo, 20);
                 f.Item("U_" + Constants.UdfEwbDate).Value = Trunc(g.EwbDate, 20); f.Item("U_" + Constants.UdfEwbValid).Value = Trunc(g.EwbValid, 20);
                 f.Item("U_" + Constants.UdfCancelStatus).Value = Trunc(g.CancelStatus, 40);
+                string overall = (g.EInvStatus == "Unknown" || g.EwbStatus == "Unknown") ? "Unknown" : (g.EInvStatus == "Generated" || g.EwbStatus == "Generated") ? "Generated" : (g.EInvStatus == "Cancelled" ? "Cancelled" : "Not generated");
+                f.Item("U_" + Constants.UdfGstStatus).Value = overall;
+                f.Item("U_" + Constants.UdfGstSyncDate).Value = (g.LastSync ?? DateTime.Now).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+                f.Item("U_" + Constants.UdfGstError).Value = Trunc(g.Error, 254);
                 int rc = d.Update();
                 if (rc != 0) Logger.Warn("udf.gst.update.failed", "docEntry", g.DocEntry, "error", _di.LastError());
             }
             finally { Marshal.ReleaseComObject(d); }
         }
+        public void AddHistory(GstHistory h)
+        {
+            Ui<object>(() =>
+            {
+                string code = Guid.NewGuid().ToString("N").Substring(0, 24);
+                var t = _di.Company.UserTables.Item(Constants.UdtTxn);
+                try
+                {
+                    t.Code = code; t.Name = code;
+                    var f = t.UserFields.Fields;
+                    f.Item("U_ConfigId").Value = _cfgId; f.Item("U_DocEntry").Value = h.DocEntry; f.Item("U_Operation").Value = Trunc(h.Operation, 30); f.Item("U_Status").Value = Trunc(h.Status, 40);
+                    f.Item("U_RequestId").Value = Trunc(h.RequestId, 40); f.Item("U_Reference").Value = Trunc(h.Reference, 120); f.Item("U_Message").Value = Trunc(h.Message, 254);
+                    f.Item("U_Ts").Value = h.At.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+                    int rc = t.Add();
+                    if (rc != 0) Logger.Warn("history.add.failed", "error", _di.LastError());
+                }
+                finally { Marshal.ReleaseComObject(t); }
+                return null;
+            });
+        }
+
+        public List<GstHistory> ListHistory(int docEntry, int max)
+        {
+            return Ui(() =>
+            {
+                var l = new List<GstHistory>();
+                DateTime ts;
+                foreach (var r in _di.Query("SELECT TOP " + max + " U_DocEntry,U_Operation,U_Status,U_RequestId,U_Reference,U_Message,U_Ts FROM [@" + Constants.UdtTxn + "] WHERE " + CfgWhere + " AND U_DocEntry=" + docEntry + " ORDER BY U_Ts DESC"))
+                    l.Add(new GstHistory { DocEntry = I(r, "U_DocEntry"), Operation = S(r, "U_Operation"), Status = S(r, "U_Status"), RequestId = S(r, "U_RequestId"), Reference = S(r, "U_Reference"), Message = S(r, "U_Message"),
+                        At = DateTime.TryParse(S(r, "U_Ts"), CultureInfo.InvariantCulture, DateTimeStyles.None, out ts) ? ts : DateTime.MinValue });
+                return l;
+            });
+        }
+
         public MapEntry GetCustomerMap(string k) { return GetMap(Constants.UdtCustMap, k); }
         public void SaveCustomerMap(MapEntry e) { SaveMap(Constants.UdtCustMap, e); }
         public void RemoveCustomerMap(string k) { RemoveMap(Constants.UdtCustMap, k); }
