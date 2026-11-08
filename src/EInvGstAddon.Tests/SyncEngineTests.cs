@@ -213,11 +213,11 @@ namespace EInvGstAddon.Tests
         [Fact]
         public void Eight_digit_hsn_missing_in_erpnext_falls_back_to_real_six_digit_parent()
         {
-            var t = Make(); t.sap.Items["ITEM-A"].Hsn = "39232199"; t.erp.Seed("GST HSN Code", "392321", new JObject());
+            var t = Make(); t.sap.Items["ITEM-A"].Hsn = "39232199"; t.erp.Seed("GST HSN Code", "392321", new JObject());   // 39232100 (heading) is seeded and preferred
             var o = t.e.Process(1);
             Assert.True(o.Success, o.Message);
-            Assert.Equal("392321", (string)t.erp.All("Item").First(i => (string)i["item_code"] == "ITEM-A")["gst_hsn_code"]);
-            Assert.Contains(o.Warnings, w => w.Contains("parent code 392321"));
+            Assert.Equal("39232100", (string)t.erp.All("Item").First(i => (string)i["item_code"] == "ITEM-A")["gst_hsn_code"]);
+            Assert.Contains(o.Warnings, w => w.Contains("parent code 39232100"));
         }
 
         [Fact]
