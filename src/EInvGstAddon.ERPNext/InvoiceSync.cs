@@ -132,6 +132,7 @@ namespace EInvGstAddon.ERPNext
                 doc["sales_team"] = Util.Arr(new JObject { ["sales_person"] = inv.Salesperson, ["allocated_percentage"] = 100 });
 
             if (!string.IsNullOrWhiteSpace(_cfg.SalesInvoiceSeries)) doc["naming_series"] = _cfg.SalesInvoiceSeries;
+            if (_cfg.ReferenceIncludesConfigId) doc["custom_sap_config_id"] = _cfg.Id;
             if (string.IsNullOrWhiteSpace(_lk.CompanyGstin))
                 outcome.Warnings.Add("Company " + _cfg.ErpCompany + " has no GSTIN configured: GST place of supply / GST fields were not set; SAP tax amounts are preserved as tax rows for review.");
             var created = _erp.Insert("Sales Invoice", doc);
