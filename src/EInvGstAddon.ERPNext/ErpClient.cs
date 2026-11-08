@@ -54,6 +54,7 @@ namespace EInvGstAddon.ERPNext
             var req = new HttpRequestMessage(method, Url(path, query));
             req.Headers.TryAddWithoutValidation("Authorization", _cfg.AuthHeader);
             req.Headers.Accept.ParseAdd("application/json");
+            if (!string.IsNullOrWhiteSpace(_cfg.ErpSite)) req.Headers.TryAddWithoutValidation("X-Frappe-Site-Name", _cfg.ErpSite);
             req.Headers.ExpectContinue = false;     // some proxies drop the connection on Expect: 100-continue
             req.Headers.ConnectionClose = true;     // never reuse a pooled connection the proxy may have closed (stale keep-alive)
             if (body != null) req.Content = new StringContent(body.ToString(Formatting.None), Encoding.UTF8, "application/json");
@@ -83,18 +84,73 @@ namespace EInvGstAddon.ERPNext
             throw new ErpApiException(ExtractMessage(text), code, ExcType(text));
         }
 
-        /// <summary>Hard safety rules for the production site shared with another company.</summary>
+        // company (name or abbreviation) of every OTHER company on the site: loaded once, used by the write guard
+        private List<KeyValuePair<string, string>> _others;
+        private static readonly HashSet<string> CompanyBoundKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "company", "account_head", "warehouse", "parent_warehouse", "cost_center", "income_account", "expense_account", "default_warehouse", "default_income_account", "round_off_account" };
+
+        private List<KeyValuePair<string, string>> OtherCompanies()
+        {
+            if (_others == null)
+            {
+                var list = new List<KeyValuePair<string, string>>();
+                foreach (var c in GetList("Company", new[] { "name", "abbr" }, null, 500))
+                {
+                    string n = (string)c["name"];
+                    if (!string.Equals(n, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase)) list.Add(new KeyValuePair<string, string>(n, (string)c["abbr"]));
+                }
+                _others = list;
+            }
+            return _others;
+        }
+
+        private bool RefersToOtherCompany(string value, out string which)
+        {
+            which = null;
+            if (string.IsNullOrEmpty(value)) return false;
+            foreach (var o in OtherCompanies())
+            {
+                if (string.Equals(value, o.Key, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(o.Value) && value.EndsWith(" - " + o.Value, StringComparison.OrdinalIgnoreCase)))
+                { which = o.Key; return true; }
+            }
+            return false;
+        }
+
+        private void ScanForOtherCompany(JToken t, string context)
+        {
+            var obj = t as JObject;
+            if (obj != null)
+            {
+                foreach (var p in obj.Properties())
+                {
+                    if (p.Value.Type == JTokenType.String && CompanyBoundKeys.Contains(p.Name))
+                    {
+                        string which;
+                        if (RefersToOtherCompany((string)p.Value, out which))
+                            throw new ConfigurationException("Safety stop: field '" + p.Name + "' = '" + (string)p.Value + "' belongs to company '" + which + "', not '" + _cfg.ErpCompany + "'. Nothing was written.");
+                    }
+                    else ScanForOtherCompany(p.Value, context);
+                }
+            }
+            else if (t is JArray) foreach (var x in (JArray)t) ScanForOtherCompany(x, context);
+        }
+
+        /// <summary>
+        /// Generic company isolation (no customer names in code): writes are refused when the configuration is invalid, when the payload names a
+        /// company other than the configured one, or when it references an account / warehouse / cost centre that belongs to any other company on the site.
+        /// </summary>
         private void Guard(string path, JObject body)
         {
             try { _cfg.ValidateTarget(); } catch (InvalidOperationException ex) { throw new ConfigurationException(ex.Message); }
             string company = body == null ? null : (string)body["company"];
             if (!string.IsNullOrEmpty(company) && !string.Equals(company, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase))
                 throw new ConfigurationException("Safety stop: refusing to write a document for company '" + company + "'. Only '" + _cfg.ErpCompany + "' may be written.");
-            string abbr = _cfg.ErpAbbr ?? "";
-            if (path.IndexOf("TTCPL", StringComparison.OrdinalIgnoreCase) >= 0 && !string.Equals(abbr, "TTCPL", StringComparison.OrdinalIgnoreCase))
-                throw new ConfigurationException("Safety stop: refusing to modify a TTCPL record (" + path + ").");
-            if (body != null && body.ToString(Formatting.None).IndexOf("TTCPL", StringComparison.OrdinalIgnoreCase) >= 0 && !string.Equals(abbr, "TTCPL", StringComparison.OrdinalIgnoreCase))
-                throw new ConfigurationException("Safety stop: refusing to write a payload that references TTCPL.");
+            string which;
+            string name = Uri.UnescapeDataString(path.Substring(path.LastIndexOf('/') + 1));
+            if (path.StartsWith("/api/resource/", StringComparison.Ordinal) && RefersToOtherCompany(name, out which))
+                throw new ConfigurationException("Safety stop: refusing to modify '" + name + "' which belongs to company '" + which + "'.");
+            if (body != null) ScanForOtherCompany(body, path);
         }
 
         private static string ExcType(string text)
@@ -133,6 +189,33 @@ namespace EInvGstAddon.ERPNext
         public JObject Method(string dottedPath, IDictionary<string, string> query = null)
         {
             return Send(HttpMethod.Get, "/api/method/" + dottedPath, query, null) as JObject;
+        }
+
+        /// <summary>POST a whitelisted method (e.g. the installed GST app's generate_e_invoice). Callers must have verified the target document's company first.</summary>
+        public JObject CallPost(string dottedPath, JObject args)
+        {
+            return Send(HttpMethod.Post, "/api/method/" + dottedPath, null, args ?? new JObject()) as JObject;
+        }
+
+        /// <summary>Binary download (PDF etc.) with the same authentication and error mapping.</summary>
+        public byte[] GetBytes(string path, IDictionary<string, string> query)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, Url(path, query));
+            req.Headers.TryAddWithoutValidation("Authorization", _cfg.AuthHeader);
+            req.Headers.ConnectionClose = true;
+            try
+            {
+                var resp = _http.SendAsync(req).GetAwaiter().GetResult();
+                var bytes = resp.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                int code = (int)resp.StatusCode;
+                if (code >= 200 && code < 300) return bytes;
+                string text = Encoding.UTF8.GetString(bytes);
+                if (code == 401 || code == 403) throw new ErpAuthException("ERPNext rejected the request (HTTP " + code + "): " + ExtractMessage(text));
+                if (code == 429 || code >= 500) throw new ErpUnavailableException("ERPNext unavailable (HTTP " + code + ").");
+                throw new ErpApiException(ExtractMessage(text), code, ExcType(text));
+            }
+            catch (TaskCanceledException ex) { throw new ErpUnavailableException("ERPNext request timed out.", ex); }
+            catch (HttpRequestException ex) { throw new ErpUnavailableException("ERPNext is not reachable: " + ex.Message, ex); }
         }
 
         public JArray GetList(string doctype, string[] fields, object filters = null, int limit = 500, string orderBy = null)

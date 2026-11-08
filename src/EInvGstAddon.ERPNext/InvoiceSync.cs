@@ -50,6 +50,13 @@ namespace EInvGstAddon.ERPNext
             if (string.IsNullOrEmpty(currency) || currency.Length != 3) throw new ConfigurationException("SAP currency '" + inv.Currency + "' cannot be mapped to an ISO code. Add it to CurrencyMap in the configuration.");
             _lk.RequireEnabledCurrency(currency);
 
+            // price list currency: the price list's own currency, converted at 1 when it is the company currency or the invoice currency
+            string plCurrency = _lk.PriceListCurrency(_cfg.SellingPriceList);
+            decimal plRate;
+            if (string.Equals(plCurrency, currency, StringComparison.OrdinalIgnoreCase)) plRate = string.Equals(currency, _lk.CompanyCurrency, StringComparison.OrdinalIgnoreCase) ? 1m : inv.ExchangeRate;
+            else if (string.Equals(plCurrency, _lk.CompanyCurrency, StringComparison.OrdinalIgnoreCase)) plRate = 1m;
+            else throw new ConfigurationException("Selling price list '" + _cfg.SellingPriceList + "' is in " + plCurrency + ", which is neither the company currency (" + _lk.CompanyCurrency + ") nor the invoice currency (" + currency + "). Choose another price list in the settings.");
+
             var rows = new JArray();
             foreach (var l in inv.Lines)
             {
@@ -100,11 +107,10 @@ namespace EInvGstAddon.ERPNext
                 ["posting_date"] = inv.PostingDate.ToString("yyyy-MM-dd"),
                 ["due_date"] = (inv.DueDate < inv.PostingDate ? inv.PostingDate : inv.DueDate).ToString("yyyy-MM-dd"),
                 ["currency"] = currency,
-                ["conversion_rate"] = currency == "INR" ? 1m : inv.ExchangeRate,
-                ["naming_series"] = _cfg.SalesInvoiceSeries,
+                ["conversion_rate"] = string.Equals(currency, _lk.CompanyCurrency, StringComparison.OrdinalIgnoreCase) ? 1m : inv.ExchangeRate,
                 ["selling_price_list"] = _cfg.SellingPriceList,
-                ["price_list_currency"] = "INR",
-                ["plc_conversion_rate"] = 1,
+                ["price_list_currency"] = plCurrency,
+                ["plc_conversion_rate"] = plRate,
                 ["update_stock"] = 0,
                 ["remarks"] = Util.Trunc(remarks, 1000),
                 ["items"] = rows,
@@ -125,7 +131,9 @@ namespace EInvGstAddon.ERPNext
             if (!string.IsNullOrEmpty(inv.Salesperson) && _erp.Exists("Sales Person", inv.Salesperson))
                 doc["sales_team"] = Util.Arr(new JObject { ["sales_person"] = inv.Salesperson, ["allocated_percentage"] = 100 });
 
-            outcome.Warnings.Add("Company " + _cfg.ErpCompany + " has no GSTIN configured: GST place of supply / GST fields were not set; SAP tax amounts are preserved as tax rows for review.");
+            if (!string.IsNullOrWhiteSpace(_cfg.SalesInvoiceSeries)) doc["naming_series"] = _cfg.SalesInvoiceSeries;
+            if (string.IsNullOrWhiteSpace(_lk.CompanyGstin))
+                outcome.Warnings.Add("Company " + _cfg.ErpCompany + " has no GSTIN configured: GST place of supply / GST fields were not set; SAP tax amounts are preserved as tax rows for review.");
             var created = _erp.Insert("Sales Invoice", doc);
             return created;
         }
@@ -183,6 +191,7 @@ namespace EInvGstAddon.ERPNext
 
         private void RequireAccount(string account, string what)
         {
+            if (string.IsNullOrWhiteSpace(account)) throw new ConfigurationException("No ERPNext account is configured for " + what + ". Set it in the add-on settings (Tax && Account mapping); it is never guessed.");
             string owner = _lk.AccountCompany(account);
             if (owner == null) throw new ConfigurationException("ERPNext account '" + account + "' (" + what + ") does not exist. Create it in ERPNext or change the add-on configuration; it is never invented.");
             if (!string.Equals(owner, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase))

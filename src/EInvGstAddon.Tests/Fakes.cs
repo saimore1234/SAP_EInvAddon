@@ -25,6 +25,10 @@ namespace EInvGstAddon.Tests
         public FakeErp()
         {
             Seed("GST HSN Code", "39232100", new JObject());
+            Seed("Company", "Vipra Closures Private Limited", new JObject { ["abbr"] = "VCPL", ["default_currency"] = "INR", ["gstin"] = "" });
+            Seed("Company", "Tint Tech Coatings Private Limited", new JObject { ["abbr"] = "TTCPL", ["default_currency"] = "INR", ["gstin"] = "24AALCT3046R1ZR" });
+            Seed("Price List", "Standard Selling", new JObject { ["currency"] = "INR" });
+            Seed("Territory", "India", new JObject()); Seed("Territory", "Rest Of The World", new JObject());
             Seed("Currency", "INR", new JObject { ["enabled"] = 1 });
             Seed("Currency", "EUR", new JObject { ["enabled"] = 1 });
             Seed("Account", "Output Tax CGST - VCPL", new JObject { ["company"] = "Vipra Closures Private Limited" });
@@ -58,6 +62,7 @@ namespace EInvGstAddon.Tests
             string dt = parts.Length > 2 ? parts[2] : null, name = parts.Length > 3 ? parts[3] : null;
 
             if (LastAuth == null || !LastAuth.StartsWith("token ")) return Reply(401, "{\"exc_type\":\"AuthenticationError\"}");
+            if (parts.Length > 2 && parts[1] == "method") return HandleMethod(parts[2], req);
             if (req.Method == HttpMethod.Get && name == null)
             {
                 var q = System.Web.HttpUtility.ParseQueryString(req.RequestUri.Query);
@@ -85,7 +90,7 @@ namespace EInvGstAddon.Tests
                 {
                     decimal net = body["items"].Sum(i => (decimal)i["qty"] * (decimal)i["price_list_rate"] * (1 - (decimal)i["discount_percentage"] / 100m));
                     decimal tax = body["taxes"].Sum(t => (decimal)t["tax_amount"]);
-                    body["grand_total"] = net + tax; body["rounded_total"] = Math.Round(net + tax, 0); body["creation"] = "2026-11-08 10:00:00";
+                    body["net_total"] = net; body["total_taxes_and_charges"] = tax; body["grand_total"] = net + tax; body["rounded_total"] = Math.Round(net + tax, 0); body["creation"] = "2026-11-08 10:00:00";
                 }
                 Seed(dt, nm, body);
                 if (dt == "Sales Invoice" && FailAfterInsertOfSalesInvoice) { FailAfterInsertOfSalesInvoice = false; throw new TaskCanceledException("timeout (simulated)"); }
@@ -93,6 +98,64 @@ namespace EInvGstAddon.Tests
             }
             if (req.Method == HttpMethod.Put) { foreach (var p in body.Properties()) Docs[dt][name][p.Name] = p.Value; return Reply(200, new JObject { ["data"] = Docs[dt][name] }.ToString()); }
             return Reply(405, "{}");
+        }
+
+        // ------------------------------------------------------------------ mock of the installed GST app (NO real IRP/GSP is ever contacted)
+        public string IrpError;                 // when set, GST calls fail with this ERPNext validation message
+        public bool TimeoutAfterGst;            // the GST call succeeds server-side but the response is lost
+        public string GstAppVersion = "15.29.0";
+        public readonly List<string> GstCalls = new List<string>();
+
+        private JObject SI(string name) { return Docs["Sales Invoice"][name]; }
+
+        private Task<HttpResponseMessage> HandleMethod(string method, HttpRequestMessage req)
+        {
+            if (method == "ping") return Reply(200, "{\"message\":\"pong\"}");
+            if (method == "frappe.auth.get_logged_user") return Reply(200, "{\"message\":\"api@example.test\"}");
+            if (method == "frappe.utils.change_log.get_versions")
+                return Reply(200, new JObject { ["message"] = new JObject { ["frappe"] = new JObject { ["version"] = "15.108.0" }, ["india_compliance"] = new JObject { ["version"] = GstAppVersion } } }.ToString());
+            var body = req.Content == null ? new JObject() : JObject.Parse(req.Content.ReadAsStringAsync().Result);
+            string leaf = method.Substring(method.LastIndexOf('.') + 1);
+            GstCalls.Add(leaf);
+            if (IrpError != null) return Reply(417, new JObject { ["exc_type"] = "ValidationError", ["_server_messages"] = new JArray(new JObject { ["message"] = IrpError }.ToString()).ToString() }.ToString());
+            string inv = (string)body["docname"];
+            var d = SI(inv);
+            string now = "2026-11-08 12:00:00";
+            switch (leaf)
+            {
+                case "generate_e_invoice":
+                    d["irn"] = "IRN" + Guid.NewGuid().ToString("N"); d["einvoice_status"] = "Generated";
+                    Seed("e-Invoice Log", (string)d["irn"], new JObject { ["reference_doctype"] = "Sales Invoice", ["reference_name"] = inv, ["acknowledgement_number"] = "112233445566", ["acknowledged_on"] = now, ["signed_qr_code"] = "SIGNED.QR.TOKEN", ["signed_invoice"] = "SIGNED.INVOICE", ["is_cancelled"] = 0 });
+                    break;
+                case "cancel_e_invoice":
+                    Docs["e-Invoice Log"][(string)d["irn"]]["is_cancelled"] = 1; d["irn"] = ""; d["einvoice_status"] = "Cancelled"; d["docstatus"] = 2;
+                    if (!string.IsNullOrEmpty((string)d["ewaybill"])) Docs["e-Waybill Log"][(string)d["ewaybill"]]["is_cancelled"] = 1;
+                    break;
+                case "generate_e_waybill":
+                    {
+                        var v = (JObject)body["values"];
+                        d["ewaybill"] = "3410" + (++_seq).ToString("00000000"); d["vehicle_no"] = v["vehicle_no"]; d["gst_transporter_id"] = v["gst_transporter_id"]; d["mode_of_transport"] = v["mode_of_transport"]; d["distance"] = v["distance"];
+                        Seed("e-Waybill Log", (string)d["ewaybill"], new JObject { ["e_waybill_number"] = d["ewaybill"], ["reference_doctype"] = "Sales Invoice", ["reference_name"] = inv, ["created_on"] = now, ["valid_upto"] = "2026-11-10 23:59:00", ["is_cancelled"] = 0 });
+                        break;
+                    }
+                case "cancel_e_waybill": Docs["e-Waybill Log"][(string)d["ewaybill"]]["is_cancelled"] = 1; d["ewaybill"] = ""; break;
+                case "update_vehicle_info": d["vehicle_no"] = body["values"]["vehicle_no"]; break;
+                case "update_transporter": d["gst_transporter_id"] = body["values"]["gst_transporter_id"]; break;
+                case "fetch_e_waybill_data": break;
+                default: return Reply(404, "{\"exc_type\":\"DoesNotExistError\"}");
+            }
+            if (TimeoutAfterGst) { TimeoutAfterGst = false; throw new TaskCanceledException("timeout (simulated)"); }
+            return Reply(200, "{\"message\":null}");
+        }
+
+        public void EnableGst(string companyGstin, bool sandbox = true)
+        {
+            Docs["Company"]["Vipra Closures Private Limited"]["gstin"] = companyGstin;
+            Seed("GST Settings", "GST Settings", new JObject
+            {
+                ["enable_api"] = 1, ["enable_e_invoice"] = 1, ["enable_e_waybill"] = 1, ["sandbox_mode"] = sandbox ? 1 : 0,
+                ["credentials"] = new JArray(new JObject { ["company"] = "Vipra Closures Private Limited", ["service"] = "e-Waybill / e-Invoice" })
+            });
         }
 
         private static bool Match(JObject d, JArray f)

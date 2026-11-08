@@ -85,7 +85,9 @@ namespace EInvGstAddon.Core
         public List<SapFreight> Expenses = new List<SapFreight>();
         public List<SapTaxAmount> Taxes = new List<SapTaxAmount>();
 
-        public string SyncReference { get { return Database + "-" + ObjType + "-" + DocEntry; } }
+        /// <summary>Set by the engine from the configuration (empty for the migrated Phase 1 configuration).</summary>
+        public string RefSuffix = "";
+        public string SyncReference { get { return Database + "-" + ObjType + "-" + DocEntry + RefSuffix; } }
     }
 
     public sealed class SyncRecord

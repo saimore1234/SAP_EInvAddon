@@ -13,9 +13,7 @@ namespace EInvGstAddon.Tests
     {
         private static AppConfig Cfg()
         {
-            var c = new AppConfig { ErpUrl = "https://erp.example.test", ApiKey = "key123456", SapDatabase = "Vipra" };
-            c.ApiSecret = "secret123456";
-            return c;
+            return TestCfg.Make();
         }
 
         private static (SyncEngine engine, FakeErp erp, FakeSap sap, MemoryStateStore store, AppConfig cfg) Make(params int[] docs)
@@ -135,7 +133,7 @@ namespace EInvGstAddon.Tests
             var client = new ErpClient(cfg, erp);
             Assert.Throws<ConfigurationException>(() => client.Insert("Sales Invoice", new JObject { ["company"] = "Tint Tech Coatings Private Limited" }));
             Assert.Throws<ConfigurationException>(() => client.Update("Account", "Output Tax IGST - TTCPL", new JObject { ["x"] = 1 }));
-            Assert.Empty(erp.Calls);
+            Assert.DoesNotContain(erp.Calls, c => c.StartsWith("POST") || c.StartsWith("PUT"));
         }
 
         [Fact]
@@ -179,7 +177,7 @@ namespace EInvGstAddon.Tests
         [Fact]
         public void Precision_difference_row_is_added_to_the_draft()
         {
-            var cfg = new AppConfig { ErpUrl = "https://erp.example.test", ApiKey = "key123456", SapDatabase = "Vipra" }; cfg.ApiSecret = "secret123456";
+            var cfg = TestCfg.Make();
             var erp = new FakeErp(); var sap = FakeSap.WithInvoices(1); var store = new MemoryStateStore();
             sap.Invoices[1].Lines[0].UnitPrice = 0.158m; sap.Invoices[1].Lines[0].Quantity = 1000; sap.Invoices[1].Lines[0].LineTotal = 158m;
             var o = new SyncEngine(new ErpClient(cfg, erp), sap, store).Process(1);
@@ -196,7 +194,7 @@ namespace EInvGstAddon.Tests
     {
         private static (SyncEngine e, FakeErp erp, FakeSap sap, MemoryStateStore st) Make()
         {
-            var cfg = new AppConfig { ErpUrl = "https://erp.example.test", ApiKey = "key123456", SapDatabase = "Vipra" }; cfg.ApiSecret = "secret123456";
+            var cfg = TestCfg.Make();
             var erp = new FakeErp(); var sap = FakeSap.WithInvoices(1); var st = new MemoryStateStore();
             return (new SyncEngine(new ErpClient(cfg, erp), sap, st), erp, sap, st);
         }
@@ -239,7 +237,7 @@ namespace EInvGstAddon.Tests
         [Fact]
         public void Tariff_specific_code_resolves_to_the_eight_digit_heading_that_exists_in_erpnext()
         {
-            var cfg = new AppConfig { ErpUrl = "https://erp.example.test", ApiKey = "key123456", SapDatabase = "Vipra" }; cfg.ApiSecret = "secret123456";
+            var cfg = TestCfg.Make();
             var erp = new FakeErp(); var sap = FakeSap.WithInvoices(1); var st = new MemoryStateStore();
             sap.Items["ITEM-A"].Hsn = "76061220"; erp.Seed("GST HSN Code", "76061200", new JObject());   // real case: SAP 7606.12.20, ERPNext has 76061200
             var o = new SyncEngine(new ErpClient(cfg, erp), sap, st).Process(1);

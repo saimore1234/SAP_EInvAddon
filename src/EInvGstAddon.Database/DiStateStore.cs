@@ -12,21 +12,30 @@ namespace EInvGstAddon.Database
 {
     /// <summary>
     /// Persists synchronisation state in the add-on's UDTs and the invoice UDFs, always through the DI API
-    /// (OINV/INV1 are never touched with SQL writes). Safe to call from worker threads: DI work runs on the UI thread.
+    /// (OINV/INV1 are never touched with SQL writes). Every row carries U_ConfigId so two integration configurations
+    /// (different ERPNext servers / companies) can never see or overwrite each other's mappings or queue entries.
+    /// Safe to call from worker threads: DI work runs on the UI thread.
     /// </summary>
     public sealed class DiStateStore : IStateStore
     {
         private readonly DiSession _di;
+        private readonly string _cfgId;
         private static string Lit(string s) { return SapReader.Lit(s); }
-        public DiStateStore(DiSession di) { _di = di; }
+
+        /// <param name="configId">AppConfig.StoredConfigId ("" for the migrated Phase 1 configuration).</param>
+        public DiStateStore(DiSession di, string configId) { _di = di; _cfgId = configId ?? ""; }
+
+        public string ConfigId { get { return _cfgId; } }
+        private string CfgWhere { get { return "ISNULL(U_ConfigId,'')=" + Lit(_cfgId); } }
+        private string RowCode(int docEntry) { var d = docEntry.ToString(CultureInfo.InvariantCulture); return _cfgId.Length == 0 ? d : _cfgId + "-" + d; }
 
         private T Ui<T>(Func<T> f) { return _di.Ui.Invoke(f); }
 
-        private static string MapCode(string key)
+        private string MapCode(string key)
         {
             using (var md5 = MD5.Create())
             {
-                var h = md5.ComputeHash(Encoding.UTF8.GetBytes(key ?? ""));
+                var h = md5.ComputeHash(Encoding.UTF8.GetBytes(_cfgId.Length == 0 ? (key ?? "") : _cfgId + "|" + (key ?? "")));
                 var sb = new StringBuilder();
                 foreach (var b in h) sb.Append(b.ToString("x2"));
                 return sb.ToString().Substring(0, 24);
@@ -54,7 +63,7 @@ namespace EInvGstAddon.Database
         {
             return Ui(() =>
             {
-                var rows = _di.Query("SELECT " + SyncCols + " FROM [@" + Constants.UdtSync + "] WHERE Code=" + Lit(docEntry.ToString(CultureInfo.InvariantCulture)));
+                var rows = _di.Query("SELECT " + SyncCols + " FROM [@" + Constants.UdtSync + "] WHERE Code=" + Lit(RowCode(docEntry)) + " AND " + CfgWhere);
                 return rows.Count == 0 ? null : ToRec(rows[0]);
             });
         }
@@ -63,13 +72,14 @@ namespace EInvGstAddon.Database
         {
             Ui<object>(() =>
             {
-                string code = rec.DocEntry.ToString(CultureInfo.InvariantCulture);
+                string code = RowCode(rec.DocEntry);
                 var t = _di.Company.UserTables.Item(Constants.UdtSync);
                 try
                 {
                     bool exists = t.GetByKey(code);
                     if (!exists) { t.Code = code; t.Name = code; }
                     var f = t.UserFields.Fields;
+                    f.Item("U_ConfigId").Value = _cfgId;
                     f.Item("U_DocEntry").Value = rec.DocEntry;
                     f.Item("U_DocNum").Value = rec.DocNum;
                     f.Item("U_Database").Value = Trunc(rec.Database, 30);
@@ -117,9 +127,9 @@ namespace EInvGstAddon.Database
         {
             return Ui(() =>
             {
-                string where = string.IsNullOrEmpty(status) ? "" : " WHERE U_Status=" + Lit(status);
+                string where = " WHERE " + CfgWhere + (string.IsNullOrEmpty(status) ? "" : " AND U_Status=" + Lit(status));
                 var l = new List<SyncRecord>();
-                foreach (var r in _di.Query("SELECT TOP " + max + " " + SyncCols + " FROM [@" + Constants.UdtSync + "]" + where + " ORDER BY CAST(Code AS INT) DESC")) l.Add(ToRec(r));
+                foreach (var r in _di.Query("SELECT TOP " + max + " " + SyncCols + " FROM [@" + Constants.UdtSync + "]" + where + " ORDER BY U_DocEntry DESC")) l.Add(ToRec(r));
                 return l;
             });
         }
@@ -129,7 +139,7 @@ namespace EInvGstAddon.Database
             return Ui(() =>
             {
                 var d = new Dictionary<string, int>();
-                foreach (var r in _di.Query("SELECT U_Status AS S, COUNT(*) AS C FROM [@" + Constants.UdtSync + "] GROUP BY U_Status")) d[S(r, "S")] = I(r, "C");
+                foreach (var r in _di.Query("SELECT U_Status AS S, COUNT(*) AS C FROM [@" + Constants.UdtSync + "] WHERE " + CfgWhere + " GROUP BY U_Status")) d[S(r, "S")] = I(r, "C");
                 return d;
             });
         }
@@ -139,7 +149,7 @@ namespace EInvGstAddon.Database
         {
             return Ui(() =>
             {
-                var rows = _di.Query("SELECT U_SapKey,U_ErpName,U_Created,U_Note FROM [@" + udt + "] WHERE Code=" + Lit(MapCode(key)));
+                var rows = _di.Query("SELECT U_SapKey,U_ErpName,U_Created,U_Note FROM [@" + udt + "] WHERE Code=" + Lit(MapCode(key)) + " AND " + CfgWhere);
                 if (rows.Count == 0) return null;
                 return new MapEntry { SapKey = S(rows[0], "U_SapKey"), ErpName = S(rows[0], "U_ErpName"), Created = S(rows[0], "U_Created"), Note = S(rows[0], "U_Note") };
             });
@@ -155,6 +165,7 @@ namespace EInvGstAddon.Database
                 {
                     bool exists = t.GetByKey(code);
                     if (!exists) { t.Code = code; t.Name = code; }
+                    t.UserFields.Fields.Item("U_ConfigId").Value = _cfgId;
                     t.UserFields.Fields.Item("U_SapKey").Value = Trunc(e.SapKey, 100);
                     t.UserFields.Fields.Item("U_ErpName").Value = Trunc(e.ErpName, 140);
                     t.UserFields.Fields.Item("U_Created").Value = Trunc(e.Created, 1);

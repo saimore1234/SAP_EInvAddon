@@ -120,3 +120,26 @@ namespace EInvGstAddon.Tests
         }
     }
 }
+
+namespace EInvGstAddon.Tests
+{
+    public class LiveVerify
+    {
+        private readonly ITestOutputHelper _out;
+        public LiveVerify(ITestOutputHelper o) { _out = o; }
+
+        [Fact]
+        public void Show_vipra_invoices_after()
+        {
+            if (Environment.GetEnvironmentVariable("EINV_LIVE") != "1") return;
+            int from = int.Parse(Environment.GetEnvironmentVariable("EINV_FROM") ?? "2624");
+            using (var erp = new ErpClient(ConfigStore.Load()))
+            {
+                var l = erp.GetList("Sales Invoice", new[] { "name", "docstatus", "company", "customer_name", "currency", "net_total", "total_taxes_and_charges", "grand_total", "rounded_total", "custom_sap_docentry", "irn", "naming_series" },
+                    new object[] { new object[] { "custom_sap_database", "=", "Vipra" }, new object[] { "custom_sap_docentry", ">=", from.ToString() } }, 50);
+                foreach (var x in l) _out.WriteLine(x.ToString(Newtonsoft.Json.Formatting.None));
+                _out.WriteLine("count=" + l.Count);
+            }
+        }
+    }
+}

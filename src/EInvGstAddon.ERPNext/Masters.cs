@@ -28,9 +28,58 @@ namespace EInvGstAddon.ERPNext
 
         public ErpLookups(ErpClient erp) { _erp = erp; }
 
+        // ---------- discovery (nothing site-specific is assumed) ----------
+        private JObject _company;
+        public JObject CompanyDoc()
+        {
+            if (_company == null)
+            {
+                _company = _erp.GetDoc("Company", _erp.Config.ErpCompany);
+                if (_company == null) throw new ConfigurationException("ERPNext company '" + _erp.Config.ErpCompany + "' does not exist on " + _erp.Config.ErpUrl + ".");
+            }
+            return _company;
+        }
+        public string CompanyCurrency { get { return (string)CompanyDoc()["default_currency"]; } }
+        public string CompanyGstin { get { return (string)CompanyDoc()["gstin"] ?? ""; } }
+
+        private string FirstLeaf(string doctype, string nameField)
+        {
+            var l = _erp.GetList(doctype, new[] { "name" }, new object[] { new object[] { "is_group", "=", 0 } }, 1);
+            if (l.Count == 0) throw new ConfigurationException("ERPNext has no " + doctype + " to use; configure a default in the add-on settings.");
+            return (string)l[0]["name"];
+        }
+        public string LeafGroup(string doctype) { return FirstLeaf(doctype, "name"); }
+
+        public string Territory(bool overseas)
+        {
+            string want = overseas ? "Rest Of The World" : "India";
+            return _erp.Exists("Territory", want) ? want : FirstLeaf("Territory", "name");
+        }
+
+        public string RootWarehouse()
+        {
+            if (!string.IsNullOrWhiteSpace(_erp.Config.RootWarehouse)) return _erp.Config.RootWarehouse;
+            var l = _erp.GetList("Warehouse", new[] { "name", "parent_warehouse" },
+                new object[] { new object[] { "company", "=", _erp.Config.ErpCompany }, new object[] { "is_group", "=", 1 } }, 50);
+            foreach (var w in l) if (string.IsNullOrEmpty((string)w["parent_warehouse"])) return (string)w["name"];
+            throw new ConfigurationException("No root (group) warehouse found for company '" + _erp.Config.ErpCompany + "'. Set it in the add-on settings.");
+        }
+
+        private readonly Dictionary<string, string> _plCurrency = new Dictionary<string, string>();
+        public string PriceListCurrency(string priceList)
+        {
+            string c;
+            if (_plCurrency.TryGetValue(priceList, out c)) return c;
+            var d = _erp.GetDoc("Price List", priceList);
+            if (d == null) throw new ConfigurationException("Selling price list '" + priceList + "' does not exist in ERPNext. Choose an existing one in the add-on settings.");
+            c = (string)d["currency"];
+            _plCurrency[priceList] = c;
+            return c;
+        }
+
         public string EnsureUom(string sapUom, string fallback = "Nos")
         {
-            string name = string.IsNullOrWhiteSpace(sapUom) ? fallback : sapUom.Trim();
+            string name = string.IsNullOrWhiteSpace(sapUom) ? (string.IsNullOrWhiteSpace(_erp.Config.DefaultUom) ? fallback : _erp.Config.DefaultUom) : sapUom.Trim();
             if (_uoms == null)
             {
                 _uoms = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -46,7 +95,7 @@ namespace EInvGstAddon.ERPNext
 
         public string EnsureCustomerGroup(string sapGroup, string fallback)
         {
-            string g = string.IsNullOrWhiteSpace(sapGroup) ? fallback : Util.Safe(sapGroup);
+            string g = !string.IsNullOrWhiteSpace(sapGroup) ? Util.Safe(sapGroup) : (!string.IsNullOrWhiteSpace(fallback) ? fallback : LeafGroup("Customer Group"));
             if (_groups.Contains(g)) return g;
             var existing = _erp.GetDoc("Customer Group", g);
             if (existing == null)
@@ -60,7 +109,7 @@ namespace EInvGstAddon.ERPNext
 
         public string EnsureItemGroup(string sapGroup)
         {
-            string g = string.IsNullOrWhiteSpace(sapGroup) ? "Products" : Util.Safe(sapGroup);
+            string g = !string.IsNullOrWhiteSpace(sapGroup) ? Util.Safe(sapGroup) : (!string.IsNullOrWhiteSpace(_erp.Config.DefaultItemGroup) ? _erp.Config.DefaultItemGroup : LeafGroup("Item Group"));
             if (_itemGroups.Contains(g)) return g;
             if (_erp.GetDoc("Item Group", g) == null)
             {
@@ -145,14 +194,14 @@ namespace EInvGstAddon.ERPNext
                 ["customer_name"] = Util.Trunc(Util.Safe(bp.CardName), 140),
                 ["customer_type"] = "Company",
                 ["customer_group"] = _lk.EnsureCustomerGroup(bp.GroupName, _cfg.DefaultCustomerGroup),
-                ["territory"] = overseas ? "Rest Of The World" : "India",
+                ["territory"] = _lk.Territory(overseas),
                 ["custom_sap_database"] = _cfg.SapDatabase,
                 ["custom_sap_card_code"] = bp.CardCode,
                 ["gst_category"] = overseas ? "Overseas" : (bill != null && !string.IsNullOrEmpty(bill.Gstin) ? "Registered Regular" : "Unregistered")
             };
             if (!string.IsNullOrEmpty(bp.Pan)) doc["pan"] = bp.Pan;
             string cur = _cfg.MapCurrency(bp.Currency);
-            if (!string.IsNullOrEmpty(cur) && cur != "INR" && cur.Length == 3 && !cur.Equals("AC", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(cur) && !string.Equals(cur, _lk.CompanyCurrency, StringComparison.OrdinalIgnoreCase) && cur.Length == 3 && !cur.Equals("AC", StringComparison.OrdinalIgnoreCase))
             {
                 try { _lk.RequireEnabledCurrency(cur); doc["default_currency"] = cur; }
                 catch (ConfigurationException) { outcome.Warnings.Add("Customer currency " + cur + " is not enabled in ERPNext; default currency not set."); }
@@ -342,7 +391,8 @@ namespace EInvGstAddon.ERPNext
     {
         private readonly ErpClient _erp; private readonly IStateStore _store; private readonly ISapSource _sap; private readonly AppConfig _cfg;
         private readonly Dictionary<string, string> _cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        public WarehouseSync(ErpClient erp, IStateStore store, ISapSource sap) { _erp = erp; _store = store; _sap = sap; _cfg = erp.Config; }
+        private readonly ErpLookups _lk;
+        public WarehouseSync(ErpClient erp, IStateStore store, ISapSource sap, ErpLookups lk = null) { _erp = erp; _store = store; _sap = sap; _cfg = erp.Config; _lk = lk ?? new ErpLookups(erp); }
 
         /// <summary>Resolves a SAP warehouse to an ERPNext warehouse owned by the configured company; creates it under that company if needed.</summary>
         public string Ensure(string sapWhsCode, SyncOutcome outcome)
@@ -371,7 +421,7 @@ namespace EInvGstAddon.ERPNext
                 var doc = new JObject
                 {
                     ["doctype"] = "Warehouse", ["warehouse_name"] = baseName, ["company"] = _cfg.ErpCompany,
-                    ["parent_warehouse"] = _cfg.RootWarehouse, ["is_group"] = 0
+                    ["parent_warehouse"] = _lk.RootWarehouse(), ["is_group"] = 0
                 };
                 if (!string.IsNullOrWhiteSpace(w.City)) doc["city"] = w.City;
                 if (!string.IsNullOrWhiteSpace(w.ZipCode)) doc["pin"] = w.ZipCode;

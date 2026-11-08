@@ -20,7 +20,7 @@ namespace EInvGstAddon.ERPNext
         {
             _erp = erp; _sap = sap; _store = store; _cfg = erp.Config;
             _lk = new ErpLookups(erp);
-            var whs = new WarehouseSync(erp, store, sap);
+            var whs = new WarehouseSync(erp, store, sap, _lk);
             var cust = new CustomerSync(erp, store, sap, _lk);
             var items = new ItemSync(erp, store, sap, _lk, whs);
             _inv = new InvoiceSync(erp, sap, store, _lk, cust, items, whs);
@@ -40,6 +40,7 @@ namespace EInvGstAddon.ERPNext
             try
             {
                 inv = _sap.GetInvoice(docEntry);
+                inv.RefSuffix = _cfg.ReferenceSuffix;
                 rec.DocNum = inv.DocNum; rec.Database = inv.Database; rec.Status = SyncStatus.Processing; rec.Error = null;
                 _store.SaveRecord(rec);
 

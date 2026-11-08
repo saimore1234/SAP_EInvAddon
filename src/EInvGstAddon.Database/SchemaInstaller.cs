@@ -34,11 +34,11 @@ namespace EInvGstAddon.Database
             {
                 new Fld("DocEntry", "SAP DocEntry", BoFieldTypes.db_Numeric, 11),
                 new Fld("DocNum", "SAP DocNum", BoFieldTypes.db_Numeric, 11),
-                A("Database", "SAP Database", 30), A("ErpInv", "ERPNext Invoice ID", 60), A("Customer", "Customer Mapping", 140),
+                A("ConfigId", "Configuration Id", 20), A("Database", "SAP Database", 30), A("ErpInv", "ERPNext Invoice ID", 60), A("Customer", "Customer Mapping", 140),
                 A("Status", "Sync Status", 20), A("SyncTs", "Sync Date/Time", 20), A("Error", "Error Message", 254),
                 new Fld("Retry", "Retry Count", BoFieldTypes.db_Numeric, 5)
             }, log);
-            var mapFields = new[] { A("SapKey", "SAP Key", 100), A("ErpName", "ERPNext Name", 140), A("Created", "Created By Add-on", 1), A("Note", "Note", 254) };
+            var mapFields = new[] { A("ConfigId", "Configuration Id", 20), A("SapKey", "SAP Key", 100), A("ErpName", "ERPNext Name", 140), A("Created", "Created By Add-on", 1), A("Note", "Note", 254) };
             EnsureFields("@" + Constants.UdtCustMap, mapFields, log);
             EnsureFields("@" + Constants.UdtItemMap, mapFields, log);
             EnsureFields("@" + Constants.UdtWhsMap, mapFields, log);
