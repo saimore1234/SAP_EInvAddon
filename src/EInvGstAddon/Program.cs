@@ -27,6 +27,15 @@ namespace EInvGstAddon
                     MessageBox.Show("No SAP Business One connection string was supplied.\nThis add-on must be started by SAP Business One.", Constants.AddonName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return 1;
                 }
+                if (args.Length > 1 && args[1] == "--probe")
+                {
+                    var c = new SapConnection();
+                    c.Connect(args[0]);
+                    string msg = "database=" + c.DatabaseName + " user=" + c.UserName;
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "einv_probe.txt"), msg);
+                    c.Release();
+                    return 0;
+                }
                 try { new AddonHost().Run(args[0]); }
                 catch (Exception ex)
                 {
