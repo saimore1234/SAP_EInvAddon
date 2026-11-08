@@ -16,7 +16,7 @@ namespace EInvGstAddon.Database
     /// (different ERPNext servers / companies) can never see or overwrite each other's mappings or queue entries.
     /// Safe to call from worker threads: DI work runs on the UI thread.
     /// </summary>
-    public sealed class DiStateStore : IStateStore
+    public sealed class DiStateStore : IStateStore, IGstStore
     {
         private readonly DiSession _di;
         private readonly string _cfgId;
@@ -189,6 +189,80 @@ namespace EInvGstAddon.Database
             });
         }
 
+
+        // ---------------- GST documents (@EINV_DOCS + invoice UDFs) ----------------
+        private const string DocCols = "U_DocEntry,U_DocNum,U_ErpInv,U_Customer,U_Gstin,U_InvDate,U_Taxable,U_GstAmt,U_EInvStatus,U_Irn,U_AckNo,U_AckDate,U_SignedQr,U_SignedInv,U_CancelSt,U_EwbStatus,U_EwbNo,U_EwbDate,U_EwbValid,U_Transpr,U_Vehicle,U_Mode,U_Distance,U_LastSync,U_Error";
+
+        public GstRecord GetGst(int docEntry)
+        {
+            return Ui(() =>
+            {
+                var rows = _di.Query("SELECT " + DocCols + " FROM [@" + Constants.UdtDocs + "] WHERE Code=" + Lit(RowCode(docEntry)) + " AND " + CfgWhere);
+                if (rows.Count == 0) return null;
+                var r = rows[0];
+                DateTime d;
+                return new GstRecord
+                {
+                    DocEntry = I(r, "U_DocEntry"), DocNum = I(r, "U_DocNum"), ErpInvoice = S(r, "U_ErpInv"), Customer = S(r, "U_Customer"), Gstin = S(r, "U_Gstin"),
+                    InvoiceDate = DateTime.TryParse(S(r, "U_InvDate"), CultureInfo.InvariantCulture, DateTimeStyles.None, out d) ? (DateTime?)d : null,
+                    Taxable = Dec(r, "U_Taxable"), Gst = Dec(r, "U_GstAmt"), EInvStatus = S(r, "U_EInvStatus"), Irn = S(r, "U_Irn"), AckNo = S(r, "U_AckNo"), AckDate = S(r, "U_AckDate"),
+                    SignedQr = S(r, "U_SignedQr"), SignedInvoice = S(r, "U_SignedInv"), CancelStatus = S(r, "U_CancelSt"), EwbStatus = S(r, "U_EwbStatus"), EwbNo = S(r, "U_EwbNo"),
+                    EwbDate = S(r, "U_EwbDate"), EwbValid = S(r, "U_EwbValid"), Transporter = S(r, "U_Transpr"), Vehicle = S(r, "U_Vehicle"), Mode = S(r, "U_Mode"), Distance = Dec(r, "U_Distance"),
+                    Error = S(r, "U_Error"), LastSync = DateTime.TryParse(S(r, "U_LastSync"), CultureInfo.InvariantCulture, DateTimeStyles.None, out d) ? (DateTime?)d : null
+                };
+            });
+        }
+
+        private static decimal Dec(Dictionary<string, object> r, string k) { object v; return r.TryGetValue(k, out v) && v != null ? Convert.ToDecimal(v, CultureInfo.InvariantCulture) : 0m; }
+
+        public void SaveGst(GstRecord g)
+        {
+            Ui<object>(() =>
+            {
+                string code = RowCode(g.DocEntry);
+                var t = _di.Company.UserTables.Item(Constants.UdtDocs);
+                try
+                {
+                    bool exists = t.GetByKey(code);
+                    if (!exists) { t.Code = code; t.Name = code; }
+                    var f = t.UserFields.Fields;
+                    f.Item("U_ConfigId").Value = _cfgId; f.Item("U_DocEntry").Value = g.DocEntry; f.Item("U_DocNum").Value = g.DocNum;
+                    f.Item("U_ErpInv").Value = Trunc(g.ErpInvoice, 60); f.Item("U_Customer").Value = Trunc(g.Customer, 100); f.Item("U_Gstin").Value = Trunc(g.Gstin, 20);
+                    f.Item("U_InvDate").Value = g.InvoiceDate.HasValue ? g.InvoiceDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "";
+                    f.Item("U_Taxable").Value = (double)g.Taxable; f.Item("U_GstAmt").Value = (double)g.Gst;
+                    f.Item("U_EInvStatus").Value = Trunc(g.EInvStatus, 20); f.Item("U_Irn").Value = Trunc(g.Irn, 64); f.Item("U_AckNo").Value = Trunc(g.AckNo, 30); f.Item("U_AckDate").Value = Trunc(g.AckDate, 20);
+                    f.Item("U_SignedQr").Value = g.SignedQr ?? ""; f.Item("U_SignedInv").Value = g.SignedInvoice ?? "";
+                    f.Item("U_CancelSt").Value = Trunc(g.CancelStatus, 40); f.Item("U_EwbStatus").Value = Trunc(g.EwbStatus, 20); f.Item("U_EwbNo").Value = Trunc(g.EwbNo, 20);
+                    f.Item("U_EwbDate").Value = Trunc(g.EwbDate, 20); f.Item("U_EwbValid").Value = Trunc(g.EwbValid, 20);
+                    f.Item("U_Transpr").Value = Trunc(g.Transporter, 100); f.Item("U_Vehicle").Value = Trunc(g.Vehicle, 20); f.Item("U_Mode").Value = Trunc(g.Mode, 10); f.Item("U_Distance").Value = (double)g.Distance;
+                    f.Item("U_LastSync").Value = (g.LastSync ?? DateTime.Now).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture); f.Item("U_Error").Value = Trunc(g.Error, 254);
+                    int rc = exists ? t.Update() : t.Add();
+                    if (rc != 0) throw new InvalidOperationException("Saving @" + Constants.UdtDocs + " failed: " + _di.LastError());
+                }
+                finally { Marshal.ReleaseComObject(t); }
+                UpdateInvoiceGstUdf(g);
+                return null;
+            });
+        }
+
+        /// <summary>Small status values only (the signed payloads stay in the UDT memo fields). DI API, never SQL.</summary>
+        private void UpdateInvoiceGstUdf(GstRecord g)
+        {
+            var d = (Documents)_di.Company.GetBusinessObject(BoObjectTypes.oInvoices);
+            try
+            {
+                if (!d.GetByKey(g.DocEntry)) return;
+                var f = d.UserFields.Fields;
+                f.Item("U_" + Constants.UdfEInvStatus).Value = Trunc(g.EInvStatus, 20); f.Item("U_" + Constants.UdfIrn).Value = Trunc(g.Irn, 64);
+                f.Item("U_" + Constants.UdfAckNo).Value = Trunc(g.AckNo, 30); f.Item("U_" + Constants.UdfAckDate).Value = Trunc(g.AckDate, 20);
+                f.Item("U_" + Constants.UdfEwbStatus).Value = Trunc(g.EwbStatus, 20); f.Item("U_" + Constants.UdfEwbNo).Value = Trunc(g.EwbNo, 20);
+                f.Item("U_" + Constants.UdfEwbDate).Value = Trunc(g.EwbDate, 20); f.Item("U_" + Constants.UdfEwbValid).Value = Trunc(g.EwbValid, 20);
+                f.Item("U_" + Constants.UdfCancelStatus).Value = Trunc(g.CancelStatus, 40);
+                int rc = d.Update();
+                if (rc != 0) Logger.Warn("udf.gst.update.failed", "docEntry", g.DocEntry, "error", _di.LastError());
+            }
+            finally { Marshal.ReleaseComObject(d); }
+        }
         public MapEntry GetCustomerMap(string k) { return GetMap(Constants.UdtCustMap, k); }
         public void SaveCustomerMap(MapEntry e) { SaveMap(Constants.UdtCustMap, e); }
         public void RemoveCustomerMap(string k) { RemoveMap(Constants.UdtCustMap, k); }

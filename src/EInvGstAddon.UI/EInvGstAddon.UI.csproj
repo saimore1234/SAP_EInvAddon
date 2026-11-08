@@ -11,6 +11,8 @@
     <ProjectReference Include="..\EInvGstAddon.ERPNext\EInvGstAddon.ERPNext.csproj" />
     <ProjectReference Include="..\EInvGstAddon.Database\EInvGstAddon.Database.csproj" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <PackageReference Include="QRCoder" Version="1.4.3" />
     <Reference Include="System.Net.Http" />
     <!-- SAP Business One UI API 10.0 -->
     <COMReference Include="SAPbouiCOM">

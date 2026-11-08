@@ -80,7 +80,7 @@ namespace EInvGstAddon.Tests
             {
                 string nm = (string)body["customer_name"] ?? (string)body["item_code"] ?? (string)body["uom_name"] ?? (string)body["customer_group_name"] ?? (string)body["item_group_name"];
                 if (dt == "Sales Invoice") nm = "ACC-SINV-2026-" + (++_seq).ToString("00000");
-                else if (dt == "Warehouse") nm = (string)body["warehouse_name"] + " - VCPL";
+                else if (dt == "Warehouse") nm = (string)body["warehouse_name"] + " - " + (string)Docs["Company"][(string)body["company"]]["abbr"];
                 else if (dt == "Address") nm = (string)body["address_title"] + "-" + (string)body["address_type"];
                 else if (dt == "Contact") nm = (string)body["first_name"] + "-C";
                 else if (dt == "Custom Field") nm = (string)body["dt"] + "-" + (string)body["fieldname"];

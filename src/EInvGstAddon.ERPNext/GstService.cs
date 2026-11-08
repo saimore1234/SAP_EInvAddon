@@ -322,6 +322,31 @@ namespace EInvGstAddon.ERPNext
                 new Dictionary<string, string> { { "doctype", "Sales Invoice" }, { "name", salesInvoice }, { "no_letterhead", "0" } });
         }
 
+
+        public byte[] DownloadEWayBillPdf(string salesInvoice)
+        {
+            var s = GetStatus(salesInvoice);
+            if (string.IsNullOrEmpty(s.EwbNo)) throw new ConfigurationException("This invoice has no E-Way Bill.");
+            return _erp.GetBytes("/api/method/frappe.utils.print_format.download_pdf",
+                new Dictionary<string, string> { { "doctype", "e-Waybill Log" }, { "name", s.EwbNo }, { "no_letterhead", "1" } });
+        }
+
+        /// <summary>Output tax accounts the GST app itself uses for this company (GST Settings -> GST Accounts); used to pre-fill the tax mapping.</summary>
+        public Dictionary<string, string> SuggestGstAccounts(out string cessAccount)
+        {
+            cessAccount = null;
+            var map = new Dictionary<string, string>();
+            var gs = _erp.GetDoc("GST Settings", "GST Settings");
+            var rows = gs == null ? null : gs["gst_accounts"] as JArray;
+            if (rows == null) return map;
+            var r = rows.FirstOrDefault(x => string.Equals((string)x["company"], _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase) && string.Equals((string)x["account_type"], "Output", StringComparison.OrdinalIgnoreCase));
+            if (r == null) return map;
+            if (!string.IsNullOrEmpty((string)r["cgst_account"])) map["-100"] = (string)r["cgst_account"];
+            if (!string.IsNullOrEmpty((string)r["sgst_account"])) map["-110"] = (string)r["sgst_account"];
+            if (!string.IsNullOrEmpty((string)r["igst_account"])) map["-120"] = (string)r["igst_account"];
+            cessAccount = (string)r["cess_account"];
+            return map;
+        }
         // =================================================================== SAP-side record
         public GstRecord ToRecord(int docEntry, int docNum, GstStatus s)
         {

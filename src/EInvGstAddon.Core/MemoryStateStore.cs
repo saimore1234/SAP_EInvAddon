@@ -35,3 +35,14 @@ namespace EInvGstAddon.Core
         public int ItemMaps { get { lock (_g) return _i.Count; } }
     }
 }
+
+namespace EInvGstAddon.Core
+{
+    /// <summary>In-memory IGstStore for tests.</summary>
+    public sealed class MemoryGstStore : IGstStore
+    {
+        private readonly System.Collections.Generic.Dictionary<int, GstRecord> _d = new System.Collections.Generic.Dictionary<int, GstRecord>();
+        public GstRecord GetGst(int docEntry) { lock (_d) { GstRecord r; return _d.TryGetValue(docEntry, out r) ? r : null; } }
+        public void SaveGst(GstRecord rec) { lock (_d) _d[rec.DocEntry] = rec; }
+    }
+}

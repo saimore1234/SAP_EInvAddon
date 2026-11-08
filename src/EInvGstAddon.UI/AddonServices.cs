@@ -21,6 +21,10 @@ namespace EInvGstAddon.UI
         public FormRouter Router;
         public Coordinator Coordinator;
         public bool SchemaReady;
+        /// <summary>false when no active configuration exists for the open SAP company database (only the configuration screens work).</summary>
+        public bool HasConfig;
+        public IGstStore GstStore { get { return Store; } }
+        public GstService NewGst() { return new GstService(NewClient()); }
         private SyncEngine _engine;
         private readonly object _gate = new object();
 
@@ -61,6 +65,7 @@ namespace EInvGstAddon.UI
         /// <summary>A/R invoice was successfully committed in SAP (FormDataEvent ADD, after action, success).</summary>
         public void OnInvoiceAdded(int docEntry)
         {
+            if (!_s.HasConfig || !_s.Cfg.Active) return;
             if (!string.Equals(_s.Sap.DatabaseName, _s.Cfg.SapDatabase, StringComparison.OrdinalIgnoreCase)) return;   // company isolation
             UiThread.Post(() =>
             {
@@ -91,7 +96,7 @@ namespace EInvGstAddon.UI
         /// <summary>Runs on the UI thread every 30 s: re-queues Pending invoices whose back-off has elapsed.</summary>
         public void Tick()
         {
-            if (!_s.Cfg.AutoSync || !_s.SchemaReady) return;
+            if (!_s.HasConfig || !_s.Cfg.AutoSync || !_s.SchemaReady) return;
             try
             {
                 foreach (var r in _s.Store.ListRecords(SyncStatus.Pending, 200))
@@ -125,11 +130,24 @@ namespace EInvGstAddon.UI
             catch (Exception ex) { Logger.Warn("startscan.failed", "error", ex.Message); }
         }
 
+        /// <summary>After a successful sync, make the invoice visible in the E-Invoice / E-Way Bill registers (status Not generated).</summary>
+        private void SeedGstRecord(int docEntry, SyncOutcome o)
+        {
+            try
+            {
+                if (_s.GstStore.GetGst(docEntry) != null) return;
+                var rec = _s.Store.GetRecord(docEntry);
+                _s.GstStore.SaveGst(new GstRecord { DocEntry = docEntry, DocNum = rec == null ? 0 : rec.DocNum, ErpInvoice = o.ErpInvoice, EInvStatus = "Not generated", EwbStatus = "Not generated", LastSync = DateTime.Now });
+            }
+            catch (Exception ex) { Logger.Warn("gst.seed.failed", "docEntry", docEntry, "error", ex.Message); }
+        }
+
         /// <summary>Queue callback (worker thread): show the result in SAP on the UI thread.</summary>
         public void OnResult(int docEntry, SyncOutcome o)
         {
             UiThread.Post(() =>
             {
+                if (o.Success) SeedGstRecord(docEntry, o);
                 string msg = o.Success ? "ERPNext sync OK: SAP DocEntry " + docEntry + " -> " + o.ErpInvoice + " (" + o.ErpDocStatus + ")"
                                        : "ERPNext sync " + o.Status + " for DocEntry " + docEntry + ": " + o.Message;
                 _s.Status(msg, !o.Success);

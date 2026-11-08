@@ -49,6 +49,25 @@ namespace EInvGstAddon.Database
                 A(Constants.UdfErpDoc, "ERPNext Invoice", 60), A(Constants.UdfErpStatus, "ERPNext Sync Status", 20),
                 A(Constants.UdfLastSync, "Last Sync", 20), A(Constants.UdfSyncError, "Sync Error", 254)
             }, log);
+            // --- GST documents (large signed payloads only in memo fields of this UDT; SAP standard tables stay untouched) ---
+            EnsureTable(Constants.UdtDocs, "ERPNext GST documents", log);
+            EnsureFields("@" + Constants.UdtDocs, new[]
+            {
+                A("ConfigId", "Configuration Id", 20), new Fld("DocEntry", "SAP DocEntry", BoFieldTypes.db_Numeric, 11), new Fld("DocNum", "SAP DocNum", BoFieldTypes.db_Numeric, 11),
+                A("ErpInv", "ERPNext Invoice ID", 60), A("Customer", "Customer", 100), A("Gstin", "Customer GSTIN", 20), A("InvDate", "Invoice Date", 10),
+                new Fld("Taxable", "Taxable Amount", BoFieldTypes.db_Float, 0, BoFldSubTypes.st_Sum), new Fld("GstAmt", "GST Amount", BoFieldTypes.db_Float, 0, BoFldSubTypes.st_Sum),
+                A("EInvStatus", "IRN Status", 20), A("Irn", "IRN", 64), A("AckNo", "Ack Number", 30), A("AckDate", "Ack Date", 20),
+                new Fld("SignedQr", "Signed QR Code", BoFieldTypes.db_Memo, 0), new Fld("SignedInv", "Signed Invoice", BoFieldTypes.db_Memo, 0),
+                A("CancelSt", "Cancellation Status", 40), A("EwbStatus", "E-Way Bill Status", 20), A("EwbNo", "E-Way Bill No", 20), A("EwbDate", "E-Way Bill Date", 20), A("EwbValid", "E-Way Bill Valid Until", 20),
+                A("Transpr", "Transporter", 100), A("Vehicle", "Vehicle", 20), A("Mode", "Transport Mode", 10), new Fld("Distance", "Distance", BoFieldTypes.db_Float, 0, BoFldSubTypes.st_Quantity),
+                A("LastSync", "Last Sync", 20), A("Error", "Error Message", 254)
+            }, log);
+            EnsureFields("OINV", new[]
+            {
+                A(Constants.UdfEInvStatus, "IRN Status", 20), A(Constants.UdfIrn, "IRN", 64), A(Constants.UdfAckNo, "Ack Number", 30), A(Constants.UdfAckDate, "Ack Date", 20),
+                A(Constants.UdfEwbStatus, "E-Way Bill Status", 20), A(Constants.UdfEwbNo, "E-Way Bill No", 20), A(Constants.UdfEwbDate, "E-Way Bill Date", 20),
+                A(Constants.UdfEwbValid, "E-Way Bill Valid Until", 20), A(Constants.UdfCancelStatus, "Cancellation Status", 40)
+            }, log);
             return log;
         }
 
@@ -91,6 +110,7 @@ namespace EInvGstAddon.Database
         {
             foreach (var t in new[] { Constants.UdtSync, Constants.UdtCustMap, Constants.UdtItemMap, Constants.UdtWhsMap })
                 if (Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM OUTB WHERE TableName='" + t + "'")) == 0) return false;
+            if (Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM OUTB WHERE TableName='" + Constants.UdtDocs + "'")) == 0) return false;
             return Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM CUFD WHERE TableID='OINV' AND AliasID IN ('" + Constants.UdfErpDoc + "','" + Constants.UdfErpStatus + "','" + Constants.UdfLastSync + "','" + Constants.UdfSyncError + "')")) == 4;
         }
     }

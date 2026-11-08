@@ -81,6 +81,28 @@ namespace EInvGstAddon.UI
             return it;
         }
 
+        protected SAPbouiCOM.Item Combo(string uid, int l, int t, int w)
+        {
+            Form.DataSources.UserDataSources.Add(Ud(uid), SAPbouiCOM.BoDataType.dt_SHORT_TEXT, 254);
+            var it = Form.Items.Add(uid, SAPbouiCOM.BoFormItemTypes.it_COMBO_BOX);
+            it.Left = l; it.Top = t; it.Width = w; it.Height = 15;
+            ((SAPbouiCOM.ComboBox)it.Specific).DataBind.SetBound(true, "", Ud(uid));
+            return it;
+        }
+
+        protected void ClearCombo(string uid)
+        {
+            var c = (SAPbouiCOM.ComboBox)Form.Items.Item(uid).Specific;
+            while (c.ValidValues.Count > 0) c.ValidValues.Remove(0, SAPbouiCOM.BoSearchKey.psk_Index);
+        }
+
+        protected void AddValid(string uid, string value, string text)
+        {
+            ((SAPbouiCOM.ComboBox)Form.Items.Item(uid).Specific).ValidValues.Add(value, text);
+        }
+
+        protected void Enable(string uid, bool on) { Form.Items.Item(uid).Enabled = on; }
+
         protected SAPbouiCOM.Item Check(string uid, string caption, int l, int t, int w)
         {
             Form.DataSources.UserDataSources.Add(Ud(uid), SAPbouiCOM.BoDataType.dt_SHORT_TEXT, 1);

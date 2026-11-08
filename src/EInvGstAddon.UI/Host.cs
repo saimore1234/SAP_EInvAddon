@@ -16,13 +16,14 @@ namespace EInvGstAddon.UI
         private readonly Dictionary<string, FormBase> _open = new Dictionary<string, FormBase>();
         public FormRouter(AddonServices svc) { _svc = svc; }
 
-        public void Open(string type, Func<FormBase> factory)
+        public FormBase Open(string type, Func<FormBase> factory)
         {
             var existing = _open.Values.FirstOrDefault(f => f.Form != null && f.Form.TypeEx == type);
-            if (existing != null) { try { existing.Show(); return; } catch { _open.Remove(existing.Uid); } }
+            if (existing != null) { try { existing.Show(); return existing; } catch { _open.Remove(existing.Uid); } }
             var created = factory();
             _open[created.Uid] = created;
             created.Show();
+            return created;
         }
 
         public void OnItemEvent(string formUid, SAPbouiCOM.ItemEvent e, out bool bubble)
@@ -59,7 +60,9 @@ namespace EInvGstAddon.UI
             new[] { "EINV_M_DASH", "Dashboard" }, new[] { "EINV_M_SYNC", "Invoice Synchronization" }, new[] { "EINV_M_PEND", "Pending Synchronization" },
             new[] { "EINV_M_FAIL", "Failed Synchronization" }, new[] { "EINV_M_CUST", "Customer Mapping" }, new[] { "EINV_M_ITEM", "Item Mapping" },
             new[] { "EINV_M_WHS", "Warehouse Mapping" }, new[] { "EINV_M_SET", "ERPNext Connection Settings" }, new[] { "EINV_M_LOGS", "Sync Logs" },
-            new[] { "EINV_M_HIST", "Integration History" }
+            new[] { "EINV_M_HIST", "Integration History" },
+            new[] { "EINV_M_EINV", "Generate E-Invoice" }, new[] { "EINV_M_EWB", "Generate E-Way Bill" }, new[] { "EINV_M_REGI", "E-Invoice Register" },
+            new[] { "EINV_M_REGW", "E-Way Bill Register" }, new[] { "EINV_M_GST", "GST Configuration" }, new[] { "EINV_M_TAX", "Tax & Account Mapping" }
         };
         private readonly SAPbouiCOM.Application _app;
         public MenuManager(SAPbouiCOM.Application app) { _app = app; }
@@ -102,7 +105,6 @@ namespace EInvGstAddon.UI
         public void Run(string connectionString)
         {
             UiThread.Capture();
-            _s.Cfg = ConfigStore.Load();
             _s.Sap = new SapConnection();
             _s.Sap.Connect(connectionString);
             SapReaderSetup();
@@ -127,7 +129,8 @@ namespace EInvGstAddon.UI
             _s.App.ItemEvent += OnItemEvent;
             _s.App.FormDataEvent += OnFormDataEvent;
 
-            if (_s.SchemaReady && string.Equals(_s.Sap.DatabaseName, _s.Cfg.SapDatabase, StringComparison.OrdinalIgnoreCase))
+            if (!_s.HasConfig) _s.Status("E-Invoice & ERPNext: no configuration for company database '" + _s.Di.DatabaseName + "'. Open ERPNext Connection Settings to create one.", true);
+            if (_s.HasConfig && _s.SchemaReady && string.Equals(_s.Sap.DatabaseName, _s.Cfg.SapDatabase, StringComparison.OrdinalIgnoreCase))
             {
                 _coord.StartupScan();
                 _coord.Tick();
@@ -142,7 +145,11 @@ namespace EInvGstAddon.UI
         private void SapReaderSetup()
         {
             _s.Di = new DiSession(_s.Sap.GetDiCompany(), new UiThread());
-            _s.Store = new DiStateStore(_s.Di);
+            // the active configuration is chosen by the SAP company database that is open right now
+            var cfg = ConfigStore.FindFor(_s.Di.DatabaseName);
+            _s.HasConfig = cfg != null;
+            _s.Cfg = cfg ?? new AppConfig { Id = AppConfig.NewId(), SapDatabase = _s.Di.DatabaseName, Active = false, AutoSync = false, Name = "(not configured)" };
+            _s.Store = new DiStateStore(_s.Di, _s.Cfg.StoredConfigId);
             _s.Source = new SapReader(new DiRunner(_s.Di), _s.Di.DatabaseName);
         }
 
@@ -169,7 +176,28 @@ namespace EInvGstAddon.UI
             {
                 switch (uid)
                 {
+                    case "EINV_M_SET": _s.Router.Open(SettingsForm.Type, () => new SettingsForm(_s)); break;
+                    default:
+                        if (!_s.HasConfig) { _s.Alert("There is no active ERPNext configuration for the open SAP company (" + _s.Di.DatabaseName + ").\nOpen ERPNext Connection Settings first."); break; }
+                        OpenConfigured(uid);
+                        break;
+                }
+            }
+            catch (Exception ex) { Logger.Error("menu.failed", ex, "uid", uid); _s.Alert("Could not open the screen: " + ex.Message); }
+        }
+
+        private void OpenConfigured(string uid)
+        {
+            {
+                switch (uid)
+                {
                     case "EINV_M_DASH": _s.Router.Open(DashboardForm.Type, () => new DashboardForm(_s)); break;
+                    case "EINV_M_EINV": _s.Router.Open(EInvoiceForm.Type, () => new EInvoiceForm(_s)); break;
+                    case "EINV_M_EWB": _s.Router.Open(EWayBillForm.Type, () => new EWayBillForm(_s)); break;
+                    case "EINV_M_REGI": _s.Router.Open(RegisterForm.TypeOf(false), () => new RegisterForm(_s, false)); break;
+                    case "EINV_M_REGW": _s.Router.Open(RegisterForm.TypeOf(true), () => new RegisterForm(_s, true)); break;
+                    case "EINV_M_GST": _s.Router.Open(GstConfigForm.Type, () => new GstConfigForm(_s)); break;
+                    case "EINV_M_TAX": _s.Router.Open(TaxMappingForm.Type, () => new TaxMappingForm(_s)); break;
                     case "EINV_M_SYNC": OpenList(ListMode.All); break;
                     case "EINV_M_PEND": OpenList(ListMode.Pending); break;
                     case "EINV_M_FAIL": OpenList(ListMode.Failed); break;
@@ -178,10 +206,8 @@ namespace EInvGstAddon.UI
                     case "EINV_M_CUST": OpenMap(MapKind.Customer); break;
                     case "EINV_M_ITEM": OpenMap(MapKind.Item); break;
                     case "EINV_M_WHS": OpenMap(MapKind.Warehouse); break;
-                    case "EINV_M_SET": _s.Router.Open(SettingsForm.Type, () => new SettingsForm(_s)); break;
                 }
             }
-            catch (Exception ex) { Logger.Error("menu.failed", ex, "uid", uid); _s.Alert("Could not open the screen: " + ex.Message); }
         }
 
         private void OpenList(ListMode m) { _s.Router.Open(SyncListForm.TypeOf(m), () => new SyncListForm(_s, m)); }

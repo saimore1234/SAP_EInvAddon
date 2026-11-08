@@ -83,6 +83,11 @@ namespace EInvGstAddon.Common
         /// <summary>Not configured / Configured (set by the GST validation, never assumed).</summary>
         public string GspStatus { get; set; } = "Not validated";
 
+        // ----- authorization (SAP user codes; SAP superusers are always allowed to administer) -----
+        public List<string> AdminUsers { get; set; } = new List<string>();
+        /// <summary>SAP users allowed to run GST actions (generate / cancel). Empty = every SAP user of this company.</summary>
+        public List<string> GstUsers { get; set; } = new List<string>();
+
         [JsonIgnore]
         public string ApiSecret
         {

@@ -17,6 +17,18 @@ namespace EInvGstAddon.Common
         public const string UdtCustMap = "EINV_CUSTMAP";
         public const string UdtItemMap = "EINV_ITEMMAP";
         public const string UdtWhsMap = "EINV_WHSMAP";
+        public const string UdtDocs = "EINV_DOCS";
+
+        // GST UDFs on OINV
+        public const string UdfEInvStatus = "EInvStatus";
+        public const string UdfIrn = "IRN";
+        public const string UdfAckNo = "AckNo";
+        public const string UdfAckDate = "AckDate";
+        public const string UdfEwbStatus = "EWBStatus";
+        public const string UdfEwbNo = "EWBNo";
+        public const string UdfEwbDate = "EWBDate";
+        public const string UdfEwbValid = "EWBValid";
+        public const string UdfCancelStatus = "CancelStatus";
     }
 
     public static class SyncStatus

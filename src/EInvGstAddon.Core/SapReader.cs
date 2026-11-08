@@ -200,6 +200,8 @@ namespace EInvGstAddon.Core
             return list;
         }
 
+        public Dictionary<string, object> Query1(string sql) { return One(sql); }
+
         public int GetMaxDocEntry()
         {
             var r = One("SELECT ISNULL(MAX(DocEntry),0) AS M FROM OINV");
