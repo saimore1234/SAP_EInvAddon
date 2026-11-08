@@ -98,6 +98,7 @@ namespace EInvGstAddon.UI
     {
         private readonly AddonServices _s = new AddonServices();
         private MenuManager _menu;
+        private InvoiceContextMenu _ctxMenu;
         private Coordinator _coord;
         private Timer _timer;
         private static readonly Regex DocEntryRx = new Regex(@"<DocEntry>\s*(\d+)\s*</DocEntry>", RegexOptions.IgnoreCase);
@@ -122,12 +123,15 @@ namespace EInvGstAddon.UI
             catch (Exception ex) { Logger.Error("schema.check.failed", ex); }
 
             _s.Queue = new SyncQueue(() => _s.Engine(), (d, o) => _coord.OnResult(d, o));
+            _ctxMenu = new InvoiceContextMenu(_s);
+            _ctxMenu.RemoveAll();                       // leftovers of a crashed earlier instance
             _menu = new MenuManager(_s.App);
             _menu.Create();
             _s.App.AppEvent += OnAppEvent;
             _s.App.MenuEvent += OnMenuEvent;
             _s.App.ItemEvent += OnItemEvent;
             _s.App.FormDataEvent += OnFormDataEvent;
+            _s.App.RightClickEvent += OnRightClick;
 
             if (!_s.HasConfig) _s.Status("E-Invoice & ERPNext: no configuration for company database '" + _s.Di.DatabaseName + "'. Open ERPNext Connection Settings to create one.", true);
             if (_s.HasConfig && _s.SchemaReady && string.Equals(_s.Sap.DatabaseName, _s.Cfg.SapDatabase, StringComparison.OrdinalIgnoreCase))
@@ -171,6 +175,11 @@ namespace EInvGstAddon.UI
             bubble = true;
             if (e.BeforeAction) return;
             string uid = e.MenuUID;
+            if (uid != null && uid.StartsWith(CtxMenuDefinition.IdPrefix, StringComparison.Ordinal))
+            {
+                try { _ctxMenu.OnMenu(uid); } catch (Exception ex) { Logger.Error("ctx.menu.failed", ex, "uid", uid); }
+                return;
+            }
             if (uid == null || !uid.StartsWith("EINV_M_", StringComparison.Ordinal)) return;
             try
             {
@@ -213,7 +222,26 @@ namespace EInvGstAddon.UI
         private void OpenList(ListMode m) { _s.Router.Open(SyncListForm.TypeOf(m), () => new SyncListForm(_s, m)); }
         private void OpenMap(MapKind k) { _s.Router.Open(MappingForm.TypeOf(k), () => new MappingForm(_s, k)); }
 
-        private void OnItemEvent(string formUid, ref SAPbouiCOM.ItemEvent e, out bool bubble) { bubble = true; _s.Router.OnItemEvent(formUid, e, out bubble); }
+        private void OnItemEvent(string formUid, ref SAPbouiCOM.ItemEvent e, out bool bubble)
+        {
+            bubble = true;
+            if (!e.BeforeAction && e.FormTypeEx == InvoiceContextResolver.ArInvoiceFormType)
+            {
+                try
+                {
+                    if (e.EventType == SAPbouiCOM.BoEventTypes.et_FORM_ACTIVATE) _ctxMenu.OnFormActivated(formUid);
+                    else if (e.EventType == SAPbouiCOM.BoEventTypes.et_FORM_UNLOAD) _ctxMenu.OnFormClosed(formUid);
+                }
+                catch (Exception ex) { Logger.Warn("ctx.formevent.failed", "error", ex.Message); }
+            }
+            _s.Router.OnItemEvent(formUid, e, out bubble);
+        }
+
+        private void OnRightClick(ref SAPbouiCOM.ContextMenuInfo eventInfo, out bool bubble)
+        {
+            bubble = true;
+            try { _ctxMenu.OnRightClick(eventInfo); } catch (Exception ex) { Logger.Error("ctx.rightclick.failed", ex); }
+        }
 
         /// <summary>
         /// Primary trigger: A/R Invoice (object 13) added. We act only on the AFTER event with ActionSuccess = true,
@@ -238,6 +266,7 @@ namespace EInvGstAddon.UI
             try { if (_timer != null) _timer.Stop(); } catch { }
             try { if (_s.Queue != null) _s.Queue.Dispose(); } catch { }
             try { if (_s.Router != null) _s.Router.CloseAll(); } catch { }
+            try { if (_ctxMenu != null) _ctxMenu.RemoveAll(); } catch { }
             try { if (_menu != null) _menu.Remove(); } catch { }
             try { _s.Sap.Release(); } catch { }
             Application.ExitThread();

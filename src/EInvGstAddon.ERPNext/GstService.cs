@@ -314,6 +314,99 @@ namespace EInvGstAddon.ERPNext
             return new GstResult { Success = false, Status = after, Message = callError ?? notConfirmedMsg };
         }
 
+        // =================================================================== detailed validation reports (read-only; never generate anything)
+        public sealed class CheckItem { public string Name, Message; public bool Ok, Warning; }
+
+        private static void Add(List<CheckItem> l, string name, bool ok, string okMsg, string failMsg, bool warnOnly = false)
+        {
+            l.Add(new CheckItem { Name = name, Ok = ok || warnOnly, Warning = !ok && warnOnly, Message = ok ? okMsg : failMsg });
+        }
+
+        private const string GstinRx = @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$";
+
+        public List<CheckItem> ValidateEInvoiceReport(string salesInvoice)
+        {
+            var r = new List<CheckItem>();
+            string user;
+            try { user = (string)_erp.Method("frappe.auth.get_logged_user")["message"]; }
+            catch (Exception ex) { r.Add(new CheckItem { Name = "ERPNext connection", Ok = false, Message = ex.Message }); return r; }
+            Add(r, "ERPNext connection", true, "Connected as " + user, "");
+
+            JObject co = null, si = null;
+            try { co = _erp.GetDoc("Company", _cfg.ErpCompany); } catch (Exception ex) { r.Add(new CheckItem { Name = "Active configuration / company", Ok = false, Message = ex.Message }); }
+            Add(r, "Active configuration / company", co != null && string.Equals((string)co["abbr"], _cfg.ErpAbbr, StringComparison.Ordinal),
+                "Configuration " + _cfg.Name + " -> company " + _cfg.ErpCompany, "Company " + _cfg.ErpCompany + " not found on the ERPNext site or its abbreviation differs.");
+            try { si = _erp.GetDoc("Sales Invoice", salesInvoice); } catch (Exception ex) { r.Add(new CheckItem { Name = "ERPNext invoice mapping", Ok = false, Message = ex.Message }); return r; }
+            bool mapped = si != null && string.Equals(Str(si["company"]), _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase);
+            Add(r, "ERPNext invoice mapping", mapped, "Linked to " + salesInvoice + " (" + _cfg.ErpCompany + ")",
+                si == null ? "Sales Invoice " + salesInvoice + " does not exist." : "Invoice belongs to company " + Str(si["company"]) + ", not the configured company.");
+            if (!mapped) return r;
+
+            int ds = si["docstatus"] == null ? 0 : (int)si["docstatus"];
+            Add(r, "Invoice submission status", ds == 1, "Submitted", ds == 0 ? "Draft - submit the invoice in ERPNext first." : "Cancelled.");
+            string cg = Str(si["company_gstin"]), bg = Str(si["billing_address_gstin"]), pos = Str(si["place_of_supply"]);
+            Add(r, "Supplier GSTIN", !string.IsNullOrWhiteSpace(cg) && System.Text.RegularExpressions.Regex.IsMatch(cg, GstinRx), cg, "Missing or invalid on the invoice (company GSTIN).");
+            if (!string.IsNullOrWhiteSpace(_cfg.SupplierGstin) && !string.IsNullOrWhiteSpace(cg))
+                Add(r, "Supplier GSTIN matches configuration", string.Equals(cg, _cfg.SupplierGstin.Trim(), StringComparison.OrdinalIgnoreCase), "Same as GST Configuration",
+                    "Invoice GSTIN " + cg + " differs from the configured " + _cfg.SupplierGstin + ".");
+            bool overseas = pos == "96-Other Countries";
+            Add(r, "Recipient GSTIN", overseas || (!string.IsNullOrWhiteSpace(bg) && System.Text.RegularExpressions.Regex.IsMatch(bg, GstinRx)),
+                overseas ? "Export (no GSTIN needed)" : bg, "Missing or invalid billing GSTIN: e-Invoice is not applicable to B2C invoices.");
+            Add(r, "Document number", System.Text.RegularExpressions.Regex.IsMatch(salesInvoice, @"^[A-Za-z0-9][A-Za-z0-9/-]{0,15}$"), salesInvoice,
+                salesInvoice + " is not accepted by the IRP (max 16 characters: letters, digits, slash, hyphen). Change the ERPNext naming series.");
+            DateTime pd; bool hasDate = DateTime.TryParse(Str(si["posting_date"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out pd);
+            Add(r, "Document date", hasDate && pd.Date <= DateTime.Today, hasDate ? pd.ToString("yyyy-MM-dd") : "", "Missing or in the future.");
+
+            var gs = _erp.GetDoc("GST Settings", "GST Settings");
+            if (gs != null && hasDate && gs["e_invoice_reporting_time_limit_days"] != null && Convert.ToInt32(gs["e_invoice_reporting_time_limit_days"].ToString(), CultureInfo.InvariantCulture) > 0)
+            {
+                int lim = Convert.ToInt32(gs["e_invoice_reporting_time_limit_days"].ToString(), CultureInfo.InvariantCulture);
+                Add(r, "Reporting time limit", DateTime.Today <= pd.AddDays(lim), "Within " + lim + " days", "Posting date is older than the e-Invoice reporting limit (" + lim + " days) in GST Settings.");
+            }
+            int minDigits = gs != null && gs["min_hsn_digits"] != null ? int.Parse(gs["min_hsn_digits"].ToString(), CultureInfo.InvariantCulture) : 6;
+            var bad = ((si["items"] as JArray) ?? new JArray()).Where(i => Str(i["gst_hsn_code"]).Length < minDigits).Select(i => Str(i["item_code"])).Distinct().ToList();
+            Add(r, "HSN/SAC", bad.Count == 0, "All items have HSN/SAC (min " + minDigits + " digits)", "Items without valid HSN/SAC: " + string.Join(", ", bad));
+            decimal tax = Dec(si["total_taxes_and_charges"]);
+            Add(r, "Tax details", tax > 0, "GST " + tax.ToString("N2", CultureInfo.InvariantCulture), "No tax amount on the invoice (check tax rows / zero-rated treatment).", warnOnly: true);
+            Add(r, "Place of supply", !string.IsNullOrWhiteSpace(pos), pos, "Place of supply is not set on the invoice.");
+            foreach (var kv in new[] { Tuple.Create("Billing address & PIN", Str(si["customer_address"])), Tuple.Create("Supplier address & PIN", Str(si["company_address"])) })
+            {
+                string pin = null;
+                if (!string.IsNullOrEmpty(kv.Item2)) { var a = _erp.GetDoc("Address", kv.Item2); pin = a == null ? null : Str(a["pincode"]); }
+                Add(r, kv.Item1, !string.IsNullOrEmpty(kv.Item2) && pin != null && System.Text.RegularExpressions.Regex.IsMatch(pin, @"^[1-9][0-9]{5}$"), kv.Item2 + " (PIN " + pin + ")",
+                    string.IsNullOrEmpty(kv.Item2) ? "No address linked on the invoice." : "Address " + kv.Item2 + " has no valid 6-digit PIN code.");
+            }
+            var status = GetStatus(salesInvoice);
+            var elig = ValidateForEInvoice(status);
+            var eligErrors = elig.Errors.Where(e => !e.Contains("Draft") && !e.Contains("IRN already")).ToList();
+            Add(r, "IRP eligibility / e-Invoice enabled", eligErrors.Count == 0, "Eligible", string.Join(" ", eligErrors));
+            var cfg = ValidateGstConfiguration();
+            var gspErrors = cfg.Errors.Where(e => e.Contains("GSP") || e.Contains("enable_api") || e.Contains("GSTIN")).ToList();
+            Add(r, "GSP configuration", gspErrors.Count == 0, "GSP credentials and GSTIN configured", string.Join(" ", gspErrors));
+            var ver = CheckVersions();
+            Add(r, "india_compliance version", ver.Compatible, ver.Note, ver.Note);
+            var envErrors = cfg.Errors.Where(e => e.Contains("PRODUCTION")).ToList();
+            Add(r, "Sandbox / Production", envErrors.Count == 0, "Consistent (" + _cfg.Environment + ")", string.Join(" ", envErrors));
+            Add(r, "Existing IRN", !status.HasIrn, "No IRN yet", "IRN already exists: " + status.Irn);
+            return r;
+        }
+
+        public List<CheckItem> ValidateEWayBillReport(string salesInvoice, EWayBillInput input)
+        {
+            var r = new List<CheckItem>();
+            try { _erp.Method("frappe.auth.get_logged_user"); Add(r, "ERPNext connection", true, "Connected", ""); }
+            catch (Exception ex) { r.Add(new CheckItem { Name = "ERPNext connection", Ok = false, Message = ex.Message }); return r; }
+            var s = GetStatus(salesInvoice);
+            Add(r, "Invoice submission status", s.DocStatus == 1, "Submitted", "The Sales Invoice must be submitted first.");
+            Add(r, "Existing E-Way Bill", !s.HasEwb, "None yet", "E-Way Bill " + s.EwbNo + " already exists.");
+            var c = ValidateForEWayBill(s, input, true);
+            foreach (var e in c.Errors.Where(x => !x.Contains("Submitted") && !x.Contains("already exists"))) r.Add(new CheckItem { Name = "Transport / eligibility", Ok = false, Message = e });
+            foreach (var w in c.Warnings) r.Add(new CheckItem { Name = "Note", Ok = true, Warning = true, Message = w });
+            var cfg = ValidateGstConfiguration();
+            Add(r, "GST / GSP configuration", cfg.Ok, "Configured", string.Join(" ", cfg.Errors));
+            return r;
+        }
+
         // =================================================================== documents
         public byte[] DownloadInvoicePdf(string salesInvoice)
         {

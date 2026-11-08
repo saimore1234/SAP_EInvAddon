@@ -1,4 +1,4 @@
-# Test report – generic release (47 automated tests, all passing)
+# Test report – generic release + right-click menu (72 automated tests, all passing)
 
 Run: `dotnet test src/EInvGstAddon.Tests` (offline; mock ERPNext/IRP; no real GST call, no customer credential).
 
@@ -19,3 +19,13 @@ Run: `dotnet test src/EInvGstAddon.Tests` (offline; mock ERPNext/IRP; no real GS
 * Charts: the dashboard shows KPI cards and summary tables, not graphical charts (SAP UI API has no chart control).
 * Tax *templates* are not mapped (exact SAP amounts are posted as tax rows); per-line CGST/SGST splits are not reproduced.
 * Rate-precision difference (shared ERPNext setting) still carried on a round-off account.
+
+## Right-click menu (this change)
+| Area | Result |
+|---|---|
+| Menu model: 21 actions, 3 groups, unique ids; creation under SAP menu 1280; removal; **no duplicates after repeated right-clicks** (fake menu host) | pass (automated) |
+| Same menu creation/duplicate/removal executed through the **real SAP UI API inside the running SAP B1 client** (`EInvGstAddon.exe <conn> --selftest-menu`, 9 checks incl. enabled/disabled flags) | **PASS** |
+| Invoice identification by DocEntry (DocNum alone rejected), only saved A/R invoices in view mode of the configured company, other document in front refused, one action per invoice at a time | pass (automated) |
+| Context-aware enabling: not synced / Draft / submitted / IRN present (24 h) / E-Way Bill present (validity, 24 h) / GST disabled / cancelled | pass (automated) |
+| Detailed E-Invoice validation (17 checks), E-Way Bill validation, duplicate prevention, submit-twice prevention, refresh never generates, multi-company refusal, connection failure | pass (automated, mock ERPNext) |
+| **NOT verified**: the actual right-click event, clicking the items, the dialogs and actions end-to-end in SAP, form refresh after actions, status-cache behaviour with a live ERPNext. Real IRN / E-Way Bill generation (needs a sandbox site). |  |

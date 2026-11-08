@@ -18,6 +18,12 @@ namespace EInvGstAddon
             Application.ThreadException += (s, e) => Logger.Error("unhandled.ui", e.Exception);
             AppDomain.CurrentDomain.UnhandledException += (s, e) => Logger.Error("unhandled.domain", e.ExceptionObject as Exception);
 
+            if (args != null && args.Length > 1 && args[1] == "--selftest-menu")
+            {
+                try { return EInvGstAddon.UI.SelfTest.RunMenu(args[0], System.IO.Path.Combine(System.IO.Path.GetTempPath(), "einv_selftest_menu.txt")); }
+                catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "einv_selftest_menu.txt"), "ERROR " + ex.Message + Environment.NewLine + "RESULT: FAIL"); return 1; }
+            }
+
             bool created;
             using (new Mutex(true, "Local\\EInvGstAddon_Singleton", out created))
             {

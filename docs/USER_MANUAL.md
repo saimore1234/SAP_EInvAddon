@@ -31,3 +31,17 @@ Menu: **Modules → E-Invoice & ERPNext Integration**
 ## GST automation
 Switches *Automatic E-Invoice / E-Way Bill* are off by default and can be enabled only after GST validation succeeded.
 (In this release the switches are stored and gated; the automatic trigger itself is not wired – see TEST_REPORT.)
+
+## Right-click menu on the A/R Invoice (individual invoice operations)
+Open a **saved** A/R Invoice (view mode), right-click → **E-Invoice & E-Way Bill**:
+
+* **ERPNext** – Synchronize with ERPNext · Submit Invoice in ERPNext · View ERPNext Invoice (opens it in the browser) · View Integration History
+* **E-Invoice** – Validate · Generate · View IRN Details · View Signed QR Code · Download Signed Invoice · Print E-Invoice · Refresh IRN Status · Cancel E-Invoice
+* **E-Way Bill** – Validate · Generate · View Details · Update Vehicle Number · Update Transporter · Download · Print · Refresh Status · Cancel
+
+Items that do not apply are greyed out (not synchronized → only Synchronize; Draft → Submit; submitted without IRN → Validate/Generate; IRN present → IRN views, print, refresh, cancel within 24 h; E-Way Bill present → details, vehicle/transporter update, cancel within 24 h; GST not enabled → GST items off).
+The menu is drawn from the last ERPNext status read in the background (refreshed when the invoice is opened or right-clicked, at most every 30 s); **every action re-reads ERPNext live and re-checks before doing anything**.
+The invoice is identified by **DocEntry** and the add-on refuses to act if a different document is in front when you choose an item.
+Network calls never block SAP; results appear in dialogs, the status bar and the invoice's user-defined fields (the screen is refreshed after changes).
+An **uncertain** generation (answer lost) blocks further generation until *Refresh IRN Status* has read the status successfully.
+The separate screens, registers and dashboard remain available for monitoring and bulk work.
