@@ -24,6 +24,7 @@ namespace EInvGstAddon.Tests
 
         public FakeErp()
         {
+            Seed("GST HSN Code", "39232100", new JObject());
             Seed("Currency", "INR", new JObject { ["enabled"] = 1 });
             Seed("Currency", "EUR", new JObject { ["enabled"] = 1 });
             Seed("Account", "Output Tax CGST - VCPL", new JObject { ["company"] = "Vipra Closures Private Limited" });
@@ -130,8 +131,8 @@ namespace EInvGstAddon.Tests
         {
             var s = new FakeSap();
             s.Partners["C1"] = new SapPartner { CardCode = "C1", CardName = "Test Customer One", GroupName = "Commercial", Currency = "`", BillToDefault = "HQ", ShipToDefault = "HQ" };
-            s.Items["ITEM-A"] = new SapItem { ItemCode = "ITEM-A", ItemName = "Item A", GroupName = "Products", Inventory = true, Sales = true, InventoryUom = "Kg", Hsn = "" };
-            s.Items["ITEM-B"] = new SapItem { ItemCode = "ITEM-B", ItemName = "Item B", GroupName = "Products", Inventory = true, Sales = true, InventoryUom = "Nos", DefaultWarehouse = "W1" };
+            s.Items["ITEM-A"] = new SapItem { ItemCode = "ITEM-A", ItemName = "Item A", GroupName = "Products", Inventory = true, Sales = true, InventoryUom = "Kg", Hsn = "39232100" };
+            s.Items["ITEM-B"] = new SapItem { ItemCode = "ITEM-B", ItemName = "Item B", GroupName = "Products", Inventory = true, Sales = true, InventoryUom = "Nos", DefaultWarehouse = "W1", Hsn = "39232100" };
             s.Whs["W1"] = new SapWarehouse { Code = "W1", Name = "Main", City = "Thane" };
             foreach (var d in docEntries)
             {

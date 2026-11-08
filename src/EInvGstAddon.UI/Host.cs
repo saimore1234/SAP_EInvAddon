@@ -215,6 +215,7 @@ namespace EInvGstAddon.UI
             try { if (_menu != null) _menu.Remove(); } catch { }
             try { _s.Sap.Release(); } catch { }
             Application.ExitThread();
+            new System.Threading.Thread(() => { System.Threading.Thread.Sleep(3000); Environment.Exit(0); }) { IsBackground = true }.Start();   // never leave a stale process holding the single-instance mutex
         }
     }
 }

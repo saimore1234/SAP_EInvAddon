@@ -255,6 +255,17 @@ namespace EInvGstAddon.ERPNext
                     _store.SaveItemMap(new MapEntry { SapKey = sapItemCode, ErpName = erpCode, Created = "N", Note = ours ? "linked (SAP reference present)" : "pre-existing ERPNext item reused, not modified" });
                     if (!ours) outcome.Warnings.Add("Item '" + sapItemCode + "' already existed in ERPNext without SAP reference; reused unchanged.");
                 }
+                if (string.IsNullOrEmpty((string)existing["gst_hsn_code"]))
+                {
+                    // ERPNext (GST Settings: validate HSN) rejects invoices for items without HSN/SAC.
+                    bool ours = (string)existing["custom_sap_database"] == _cfg.SapDatabase;
+                    var sapItem = _sap.GetItem(sapItemCode);
+                    string hsn = ResolveHsn(sapItem, outcome);
+                    if (hsn == null || !ours)
+                        throw new ConfigurationException("Item '" + sapItemCode + "' has no HSN/SAC in ERPNext" + (hsn == null ? " and SAP has no usable HSN/SAC for it (SAP: '" + (string.IsNullOrEmpty(sapItem.Hsn) ? sapItem.Sac : sapItem.Hsn) + "')." : "; it was not created by this add-on so it is not modified - set the HSN in ERPNext (suggested " + hsn + ")."));
+                    _erp.Update("Item", erpCode, new JObject { ["gst_hsn_code"] = hsn });      // only the add-on's own item, only this field
+                    Logger.Info("item.hsn.updated", "item", erpCode, "hsn", hsn);
+                }
                 return erpCode;
             }
 
@@ -277,13 +288,10 @@ namespace EInvGstAddon.ERPNext
             };
             if (it.ItemCode.Length > 140) throw new ConfigurationException("SAP item code '" + it.ItemCode + "' is longer than ERPNext's 140 character limit.");
 
-            string tax = !string.IsNullOrEmpty(it.Hsn) ? it.Hsn : it.Sac;
-            if (!string.IsNullOrEmpty(tax))
-            {
-                if (_lk.HsnExists(tax)) doc["gst_hsn_code"] = tax;
-                else outcome.Warnings.Add("HSN/SAC '" + tax + "' of item " + it.ItemCode + " does not exist in ERPNext (GST HSN Code); item created without it. Not invented.");
-            }
-            else outcome.Warnings.Add("Item " + it.ItemCode + " has no HSN/SAC in SAP; created without it (flagged for GST review).");
+            string hsnCode = ResolveHsn(it, outcome);
+            if (hsnCode == null)
+                throw new ConfigurationException("Item '" + it.ItemCode + "' has no usable HSN/SAC (SAP value '" + (string.IsNullOrEmpty(it.Hsn) ? it.Sac : it.Hsn) + "' is empty or not in ERPNext's GST HSN Code list). ERPNext requires one on every invoice item; set the HSN/SAC on the item in SAP. Nothing was created.");
+            doc["gst_hsn_code"] = hsnCode;
 
             if (!string.IsNullOrEmpty(it.DefaultWarehouse))
             {
@@ -301,6 +309,26 @@ namespace EInvGstAddon.ERPNext
             outcome.ItemsCreated++;
             Logger.Info("item.created", "item", code);
             return code;
+        }
+
+        /// <summary>
+        /// Finds the HSN/SAC code in ERPNext's GST HSN Code list: the SAP code itself, else its 8- or 6-digit prefix
+        /// (a real parent code, never an invented one). Returns null if none exists.
+        /// </summary>
+        private string ResolveHsn(SapItem it, SyncOutcome outcome)
+        {
+            string code = !string.IsNullOrEmpty(it.Hsn) ? it.Hsn : it.Sac;
+            if (string.IsNullOrEmpty(code)) return null;
+            var candidates = new List<string> { code };
+            if (code.Length > 8) candidates.Add(code.Substring(0, 8));
+            if (code.Length > 6) candidates.Add(code.Substring(0, 6));
+            foreach (var c in candidates.Distinct())
+            {
+                if (!_lk.HsnExists(c)) continue;
+                if (c != code) outcome.Warnings.Add("HSN " + code + " of item " + it.ItemCode + " is not in ERPNext; used its parent code " + c + ".");
+                return c;
+            }
+            return null;
         }
 
         private static void VerifyReusable(JObject item, string code)

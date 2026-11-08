@@ -188,3 +188,45 @@ namespace EInvGstAddon.Tests
         }
     }
 }
+
+namespace EInvGstAddon.Tests
+{
+    public class HsnTests
+    {
+        private static (SyncEngine e, FakeErp erp, FakeSap sap, MemoryStateStore st) Make()
+        {
+            var cfg = new AppConfig { ErpUrl = "https://erp.example.test", ApiKey = "key123456", SapDatabase = "Vipra" }; cfg.ApiSecret = "secret123456";
+            var erp = new FakeErp(); var sap = FakeSap.WithInvoices(1); var st = new MemoryStateStore();
+            return (new SyncEngine(new ErpClient(cfg, erp), sap, st), erp, sap, st);
+        }
+
+        [Fact]
+        public void Item_without_hsn_stops_with_clear_message_and_creates_nothing()
+        {
+            var t = Make(); t.sap.Items["ITEM-A"].Hsn = "";
+            var o = t.e.Process(1);
+            Assert.False(o.Success); Assert.Contains("no usable HSN/SAC", o.Message);
+            Assert.Empty(t.erp.All("Item")); Assert.Empty(t.erp.All("Sales Invoice"));
+        }
+
+        [Fact]
+        public void Eight_digit_hsn_missing_in_erpnext_falls_back_to_real_six_digit_parent()
+        {
+            var t = Make(); t.sap.Items["ITEM-A"].Hsn = "39232199"; t.erp.Seed("GST HSN Code", "392321", new JObject());
+            var o = t.e.Process(1);
+            Assert.True(o.Success, o.Message);
+            Assert.Equal("392321", (string)t.erp.All("Item").First(i => (string)i["item_code"] == "ITEM-A")["gst_hsn_code"]);
+            Assert.Contains(o.Warnings, w => w.Contains("parent code 392321"));
+        }
+
+        [Fact]
+        public void Own_item_created_earlier_without_hsn_is_repaired_on_retry()
+        {
+            var t = Make();
+            t.erp.Seed("Item", "ITEM-A", new JObject { ["item_code"] = "ITEM-A", ["custom_sap_database"] = "Vipra", ["is_sales_item"] = 1 });
+            var o = t.e.Process(1);
+            Assert.True(o.Success, o.Message);
+            Assert.Equal("39232100", (string)t.erp.Docs["Item"]["ITEM-A"]["gst_hsn_code"]);
+        }
+    }
+}
