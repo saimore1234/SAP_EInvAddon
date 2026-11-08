@@ -93,3 +93,30 @@ namespace EInvGstAddon.Tests
         }
     }
 }
+
+namespace EInvGstAddon.Tests
+{
+    /// <summary>Read-only diagnostic using the add-on's own saved configuration (DPAPI, same Windows user). Prints nothing secret.</summary>
+    public class LiveDiagnostics
+    {
+        private readonly ITestOutputHelper _out;
+        public LiveDiagnostics(ITestOutputHelper o) { _out = o; }
+
+        [Fact]
+        public void Hsn_lookup()
+        {
+            if (Environment.GetEnvironmentVariable("EINV_LIVE") != "1") return;
+            var cfg = ConfigStore.Load();
+            using (var erp = new ErpClient(cfg))
+            {
+                foreach (var c in new[] { "76061220", "760612", "7606", "76061110", "39232100" })
+                    _out.WriteLine(c + " exists=" + (erp.GetDoc("GST HSN Code", c) != null));
+                var like = erp.GetList("GST HSN Code", new[] { "name", "description" }, new object[] { new object[] { "name", "like", "7606%" } }, 20);
+                _out.WriteLine("7606% codes: " + string.Join(", ", like.Select(x => (string)x["name"])));
+                var item = erp.GetDoc("Item", "SAMPLE SHEETS");
+                _out.WriteLine("item exists=" + (item != null) + (item != null ? " hsn='" + item["gst_hsn_code"] + "'" : ""));
+                _out.WriteLine("hsn validation settings: " + string.Join(", ", new[] { "validate_hsn_code", "min_hsn_digits" }.Select(k => k + "=" + erp.GetDoc("GST Settings", "GST Settings")[k])));
+            }
+        }
+    }
+}

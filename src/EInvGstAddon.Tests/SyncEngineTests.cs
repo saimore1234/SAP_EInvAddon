@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
 using EInvGstAddon.Common;
@@ -227,6 +228,24 @@ namespace EInvGstAddon.Tests
             var o = t.e.Process(1);
             Assert.True(o.Success, o.Message);
             Assert.Equal("39232100", (string)t.erp.Docs["Item"]["ITEM-A"]["gst_hsn_code"]);
+        }
+    }
+}
+
+namespace EInvGstAddon.Tests
+{
+    public class HsnHeadingTests
+    {
+        [Fact]
+        public void Tariff_specific_code_resolves_to_the_eight_digit_heading_that_exists_in_erpnext()
+        {
+            var cfg = new AppConfig { ErpUrl = "https://erp.example.test", ApiKey = "key123456", SapDatabase = "Vipra" }; cfg.ApiSecret = "secret123456";
+            var erp = new FakeErp(); var sap = FakeSap.WithInvoices(1); var st = new MemoryStateStore();
+            sap.Items["ITEM-A"].Hsn = "76061220"; erp.Seed("GST HSN Code", "76061200", new JObject());   // real case: SAP 7606.12.20, ERPNext has 76061200
+            var o = new SyncEngine(new ErpClient(cfg, erp), sap, st).Process(1);
+            Assert.True(o.Success, o.Message);
+            Assert.Equal("76061200", (string)erp.Docs["Item"]["ITEM-A"]["gst_hsn_code"]);
+            Assert.Contains(o.Warnings, w => w.Contains("76061200"));
         }
     }
 }

@@ -321,7 +321,7 @@ namespace EInvGstAddon.ERPNext
             if (string.IsNullOrEmpty(code)) return null;
             var candidates = new List<string> { code };
             if (code.Length > 8) candidates.Add(code.Substring(0, 8));
-            if (code.Length > 6) candidates.Add(code.Substring(0, 6));
+            if (code.Length > 6) { candidates.Add(code.Substring(0, 6) + "00"); candidates.Add(code.Substring(0, 6)); }     // 6-digit heading written as 8 digits (e.g. 7606.12.20 -> 76061200)
             foreach (var c in candidates.Distinct())
             {
                 if (!_lk.HsnExists(c)) continue;
