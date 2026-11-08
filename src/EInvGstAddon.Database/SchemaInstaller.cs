@@ -111,6 +111,8 @@ namespace EInvGstAddon.Database
             foreach (var t in new[] { Constants.UdtSync, Constants.UdtCustMap, Constants.UdtItemMap, Constants.UdtWhsMap })
                 if (Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM OUTB WHERE TableName='" + t + "'")) == 0) return false;
             if (Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM OUTB WHERE TableName='" + Constants.UdtDocs + "'")) == 0) return false;
+            if (Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM CUFD WHERE TableID='@" + Constants.UdtSync + "' AND AliasID='ConfigId'")) == 0) return false;      // v1.1 column
+            if (Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM CUFD WHERE TableID='OINV' AND AliasID='" + Constants.UdfEwbNo + "'")) == 0) return false;
             return Convert.ToInt32(_di.Scalar("SELECT COUNT(*) FROM CUFD WHERE TableID='OINV' AND AliasID IN ('" + Constants.UdfErpDoc + "','" + Constants.UdfErpStatus + "','" + Constants.UdfLastSync + "','" + Constants.UdfSyncError + "')")) == 4;
         }
     }

@@ -81,6 +81,7 @@ namespace EInvGstAddon.UI
         {
             try
             {
+                if (!_s.SchemaReady) return;
                 string why;
                 var ctx = InvoiceContextResolver.Resolve(Snapshot(formUid), _s.Cfg.SapDatabase, _s.HasConfig && _s.Cfg.Active, out why);
                 if (ctx != null) Prime(ctx);
@@ -114,6 +115,7 @@ namespace EInvGstAddon.UI
         private void Build(string formUid)
         {
             string why;
+            if (!_s.SchemaReady) { _builder.Hide(); _ctx = null; _s.Status("E-Invoice & ERPNext: SAP objects are out of date. Open ERPNext Connection Settings > Create SAP UDF/UDT, then log out and in again.", true); return; }
             var ctx = InvoiceContextResolver.Resolve(Snapshot(formUid), _s.Cfg.SapDatabase, _s.HasConfig && _s.Cfg.Active, out why);
             if (ctx == null) { _builder.Hide(); _ctx = null; return; }
             _ctx = ctx;
