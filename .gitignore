@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+packages/
+# never commit credentials / local config / logs
+config.json
+*.secret
+*.env
+logs/

@@ -1,0 +1,95 @@
+using System;
+using System.Linq;
+using EInvGstAddon.Common;
+using EInvGstAddon.Core;
+using EInvGstAddon.ERPNext;
+using Newtonsoft.Json.Linq;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace EInvGstAddon.Tests
+{
+    /// <summary>
+    /// Live integration tests: read-only against the local SAP "Vipra" SQL database, writes ONLY to ERPNext company VCPL.
+    /// Disabled unless EINV_LIVE=1. Credentials come from EINV_KEY / EINV_SECRET (never from files).
+    /// EINV_DOCENTRIES (comma list) selects the SAP invoices to push.
+    /// </summary>
+    public class LiveTests
+    {
+        private readonly ITestOutputHelper _out;
+        public LiveTests(ITestOutputHelper o) { _out = o; }
+
+        private static bool Live { get { return Environment.GetEnvironmentVariable("EINV_LIVE") == "1"; } }
+
+        private static AppConfig LiveCfg()
+        {
+            var c = new AppConfig { ApiKey = Environment.GetEnvironmentVariable("EINV_KEY") };
+            c.ApiSecret = Environment.GetEnvironmentVariable("EINV_SECRET");
+            return c;
+        }
+
+        private static SapReader Reader() { return new SapReader(new SqlClientRunner("Server=localhost;Database=Vipra;Integrated Security=true;TrustServerCertificate=true"), "Vipra"); }
+
+        [Fact]
+        public void Live_connection_and_company()
+        {
+            if (!Live) return;
+            using (var erp = new ErpClient(LiveCfg()))
+            {
+                Assert.False(string.IsNullOrEmpty((string)erp.Method("frappe.auth.get_logged_user")["message"]));
+                var co = erp.GetDoc("Company", "Vipra Closures Private Limited");
+                Assert.Equal("VCPL", (string)co["abbr"]);
+                _out.WriteLine("Company OK: " + co["name"] + " gstin='" + co["gstin"] + "'");
+            }
+        }
+
+        [Fact]
+        public void Live_schema_is_created_idempotently()
+        {
+            if (!Live) return;
+            using (var erp = new ErpClient(LiveCfg()))
+            {
+                var s = new ErpSchema(erp);
+                var created = s.Ensure();
+                _out.WriteLine("created: " + string.Join(", ", created));
+                Assert.Empty(s.Missing());
+                Assert.Empty(s.Ensure());
+            }
+        }
+
+        [Fact]
+        public void Live_sync_sap_invoices_to_vcpl_draft()
+        {
+            if (!Live) return;
+            var ids = (Environment.GetEnvironmentVariable("EINV_DOCENTRIES") ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();
+            if (ids.Count == 0) return;
+            var cfg = LiveCfg();
+            var store = new MemoryStateStore();
+            var sap = Reader();
+            using (var erp = new ErpClient(cfg))
+            {
+                var engine = new SyncEngine(erp, sap, store);
+                foreach (var id in ids)
+                {
+                    var o = engine.Process(id);
+                    _out.WriteLine("DocEntry " + id + " => " + o.Status + " " + o.ErpInvoice + " " + o.ErpDocStatus + " total=" + o.ErpGrandTotal + " custCreated=" + o.CustomerCreated + " itemsCreated=" + o.ItemsCreated);
+                    _out.WriteLine("   message: " + o.Message);
+                    foreach (var w in o.Warnings) _out.WriteLine("   warn: " + w);
+                    Assert.True(o.Success, o.Message);
+                    var inv = sap.GetInvoice(id);
+                    var si = erp.GetDoc("Sales Invoice", o.ErpInvoice);
+                    Assert.Equal("Vipra Closures Private Limited", (string)si["company"]);
+                    Assert.Equal(0, (int)si["docstatus"]);
+                    _out.WriteLine("   SAP total " + inv.DocTotal + " | ERP grand " + si["grand_total"] + " rounded " + si["rounded_total"] + " net " + si["net_total"] + " | SAP vat " + inv.VatTotal + " ERP taxes " + si["total_taxes_and_charges"]);
+                    // second pass must be idempotent
+                    store.SaveRecord(new SyncRecord { DocEntry = id, Database = "Vipra", Status = SyncStatus.Failed });
+                    var again = engine.Process(id);
+                    Assert.Equal(o.ErpInvoice, again.ErpInvoice);
+                }
+                var all = erp.GetList("Sales Invoice", new[] { "name" }, new object[] { new object[] { "custom_sap_database", "=", "Vipra" } }, 100);
+                _out.WriteLine("Vipra sales invoices in ERPNext: " + all.Count);
+                Assert.True(all.Count >= ids.Distinct().Count());
+            }
+        }
+    }
+}
