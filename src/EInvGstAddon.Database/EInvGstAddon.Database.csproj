@@ -14,6 +14,8 @@
     <ProjectReference Include="..\EInvGstAddon.Common\EInvGstAddon.Common.csproj" />
     <ProjectReference Include="..\EInvGstAddon.Core\EInvGstAddon.Core.csproj" />
     <!-- SAP Business One DI API 10.0 (generated from the installed type library, same GUID as the SDK samples) -->
+  </ItemGroup>
+  <ItemGroup Condition="'$(SapInteropDir)'==''">
     <COMReference Include="SAPbobsCOM">
       <Guid>{FC8030BE-F5D2-4B8E-8F92-44228FE30100}</Guid>
       <VersionMajor>$(SapApiMajor)</VersionMajor>
@@ -23,5 +25,10 @@
       <Isolated>False</Isolated>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </COMReference>
+  </ItemGroup>
+  <ItemGroup Condition="'$(SapInteropDir)'!=''">
+    <Reference Include="Interop.SAPbobsCOM"><HintPath>$(SapInteropDir)\Interop.SAPbobsCOM.dll</HintPath><Private>True</Private></Reference>
+  </ItemGroup>
+  <ItemGroup>
   </ItemGroup>
 </Project>

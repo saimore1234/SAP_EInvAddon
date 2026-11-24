@@ -20,6 +20,8 @@
     <PackageReference Include="QRCoder" Version="1.4.3" />
     <Reference Include="System.Net.Http" />
     <!-- SAP Business One UI API 10.0 -->
+  </ItemGroup>
+  <ItemGroup Condition="'$(SapInteropDir)'==''">
     <COMReference Include="SAPbouiCOM">
       <Guid>{6048236A-956D-498D-A6F1-9C81C13AB6E8}</Guid>
       <VersionMajor>$(SapApiMajor)</VersionMajor>
@@ -29,5 +31,10 @@
       <Isolated>False</Isolated>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </COMReference>
+  </ItemGroup>
+  <ItemGroup Condition="'$(SapInteropDir)'!=''">
+    <Reference Include="Interop.SAPbouiCOM"><HintPath>$(SapInteropDir)\Interop.SAPbouiCOM.dll</HintPath><Private>True</Private></Reference>
+  </ItemGroup>
+  <ItemGroup>
   </ItemGroup>
 </Project>
