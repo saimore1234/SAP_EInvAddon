@@ -94,7 +94,42 @@ namespace EInvGstAddon.Tests
             s.ShipSnapCountry = "PH"; s.ShipSnapState = "MAN"; s.ShipSnapZip = "999999"; s.ShipStateCode = null;
             var r = Build(s);
             Assert.False(HasConsigneeError(r), string.Join(";", r.Errors));
-            Assert.Equal("URP", (string)r.Json["buyer"]["gstin"]); Assert.Equal("96", (string)r.Json["place_of_supply"]);     // e-Invoice codes; the e-Way Bill payload maps them to 99 server-side
+            Assert.Equal("URP", (string)r.Json["buyer"]["gstin"]); Assert.Equal("96", (string)r.Json["place_of_supply"]);     // e-Invoice codes; the e-Way Bill payload maps the bill-to state to 99 server-side
+        }
+
+        private static GstSource Export73()
+        {
+            var s = InvoiceJsonBuilderTests.Src();
+            s.DocEntry = 2630; s.DocNum = 73;
+            s.Buyer = new GstParty { Code = "CF00231", Name = "GINEBRA SAN MIGUEL", Street = "1555 CITY OF MANDALUYONG NCR", City = "CITY OF MANDALUYONG NCR", ZipCode = "999999", StateCode = "MAN", CountryIso2 = "PH", Gstin = "" };
+            s.ShipSnapCountry = "PH"; s.ShipSnapState = "MAN"; s.ShipStateCode = null;
+            return s;
+        }
+
+        [Fact]
+        public void Export_e_way_bill_without_an_indian_delivery_point_is_stopped_with_a_clear_message()
+        {
+            var s = Export73();                                                   // no SAP E-Way Bill Ship To
+            Assert.Contains(Build(s).Errors, e => e.Contains("movement inside India") && e.Contains("Ship To"));
+            s.EwbShipTo = new GstParty { City = "Thane", ZipCode = "999999", StateCode = "99" };      // foreign placeholders are not a delivery point
+            Assert.Contains(Build(s).Errors, e => e.Contains("movement inside India"));
+        }
+
+        [Fact]
+        public void Export_e_way_bill_uses_the_ship_to_from_the_sap_e_way_bill_details()
+        {
+            var s = Export73();                                                   // INV26 of invoice 73: ToPlace Thane, ToZipCode 412312, ActToState 27
+            s.EwbShipTo = new GstParty { Name = "GINEBRA SAN MIGUEL", City = "Thane", ZipCode = "412312", StateCode = "27", CountryIso2 = "IN" };
+            var r = Build(s);
+            Assert.DoesNotContain(r.Errors, e => e.Contains("movement inside India"));
+            var st = r.Json["ship_to"];
+            Assert.Equal("27", (string)st["state_code"]); Assert.Equal("412312", (string)st["pincode"]); Assert.Equal("Thane", (string)st["city"]); Assert.Equal("URP", (string)st["gstin"]);
+        }
+
+        [Fact]
+        public void A_domestic_invoice_is_not_asked_for_an_export_ship_to()
+        {
+            Assert.DoesNotContain(Build(InvoiceJsonBuilderTests.Src()).Errors, e => e.Contains("movement inside India"));
         }
     }
 }

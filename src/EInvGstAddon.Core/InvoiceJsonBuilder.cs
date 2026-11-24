@@ -173,6 +173,17 @@ namespace EInvGstAddon.Core
                 }
             };
             if (s.ShipTo != null) json["ship_to"] = Party(s.ShipTo, cfg);
+            if (export && transport != null)
+            {
+                // The e-Way Bill of an export covers the movement inside India: the actual Ship To must be an Indian delivery point taken from SAP's own E-Way Bill Ship To details.
+                var e = s.EwbShipTo;
+                string ec = e == null ? "" : (Regex.IsMatch(e.StateCode ?? "", @"^[0-9]{2}$") ? e.StateCode : StateCode(new GstParty { StateCode = e.StateCode }, cfg));
+                bool okTo = e != null && Regex.IsMatch((e.ZipCode ?? "").Trim(), @"^[0-9]{6}$") && e.ZipCode.Trim() != "999999" && ec != "" && ec != "96" && ec != "97" && ec != "99" && !string.IsNullOrWhiteSpace(e.City);
+                Logger.Info("ewb.exportshipto", "docEntry", s.DocEntry, "docNum", s.DocNum, "place", e == null ? "" : e.City, "pin", e == null ? "" : e.ZipCode, "state", ec, "source", "INV26.ToPlace/ToZipCode/ActToState", "ok", okTo);
+                if (!okTo) r.Errors.Add("For an export invoice the E-Way Bill covers the movement inside India. Please enter the Ship To (delivery place, 6-digit PIN code and state of the port, airport or delivery point in India) in the E-Way Bill Details of the SAP Business One invoice (Electronic Documents tab > E-Way Bill Details > Ship To).");
+                else json["ship_to"] = Party(new GstParty { Name = s.Buyer.Name, Street = e.Street, Address2 = e.Address2, City = e.City, ZipCode = e.ZipCode.Trim(), StateCode = ec, Gstin = "URP" }, cfg);
+                if (okTo) { var st = (JObject)json["ship_to"]; st["state_code"] = ec; if (string.IsNullOrEmpty((string)st["address"])) st["address"] = e.City; }
+            }
             if (export) json["export"] = new JObject { ["country_code"] = s.Buyer.CountryIso2 ?? "", ["foreign_currency"] = currency, ["port_code"] = cfg.ExportPortCode ?? "" };
             if (transport != null)
                 json["transport"] = new JObject

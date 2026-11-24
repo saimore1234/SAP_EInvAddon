@@ -270,6 +270,8 @@ namespace EInvGstAddon.Core
                 if (string.IsNullOrEmpty(s.ShipTo.Name)) s.ShipTo.Name = s.CardName;
             }
 
+            var ewbTo = One("SELECT ToAddres1,ToAddres2,ToZipCode,ActToState,ToPlace FROM INV26 WHERE DocEntry=" + docEntry);
+            if (ewbTo != null) s.EwbShipTo = new GstParty { Name = s.CardName, Street = S(ewbTo, "ToAddres1"), Address2 = S(ewbTo, "ToAddres2"), City = S(ewbTo, "ToPlace"), ZipCode = S(ewbTo, "ToZipCode"), StateCode = S(ewbTo, "ActToState"), CountryIso2 = "IN", Gstin = "" };
             var snap = One("SELECT CountryS,StateS,ZipCodeS FROM INV12 WHERE DocEntry=" + docEntry);
             if (snap != null) { s.ShipSnapCountry = S(snap, "CountryS").ToUpperInvariant(); s.ShipSnapState = S(snap, "StateS").ToUpperInvariant(); s.ShipSnapZip = S(snap, "ZipCodeS"); }
 
