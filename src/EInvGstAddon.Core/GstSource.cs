@@ -38,6 +38,7 @@ namespace EInvGstAddon.Core
         public bool ForeignCurrency;
         public GstParty Buyer = new GstParty();
         public GstParty ShipTo;                 // only when different from the bill-to address
+        public string ShipSnapCountry = "", ShipSnapState = "", ShipSnapZip = "";   // the Ship-To address saved on the invoice itself (INV12.CountryS/StateS/ZipCodeS); may differ from the customer master
         public List<GstLine> Lines = new List<GstLine>();
         public List<GstTaxRow> Taxes = new List<GstTaxRow>();
         public List<GstExpense> Expenses = new List<GstExpense>();

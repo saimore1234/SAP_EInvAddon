@@ -169,14 +169,14 @@ namespace EInvGstAddon.Tests
 
     public class InvoiceJsonBuilderTests
     {
-        private static AppConfig Cfg()
+        public static AppConfig Cfg()
         {
             var c = new AppConfig { IntegrationId = "IT1", SapDatabase = "DB_ONE", SupplierGstin = "27AABCT1234F1ZX", LegalName = "Seller Ltd", GstAddress = "1 Factory Road", GstCity = "Thane", StateCode = "27", GstPin = "400601", Environment = "Sandbox" };
             c.CurrencyMap["`"] = "INR";
             return c;
         }
 
-        private static GstSource Src(bool igst = true)
+        public static GstSource Src(bool igst = true)
         {
             var s = new GstSource
             {

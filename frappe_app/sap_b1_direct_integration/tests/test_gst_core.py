@@ -107,6 +107,17 @@ class ValidationTests(Base):
         inv["currency"] = "EUR"; inv["supply_type"] = "B2B"
         self.assertIn("CURRENCY", [e["code"] for e in self.api.validate_invoice(req(inv))["errors"]])
 
+    def test_export_ewb_uses_the_ewb_other_country_state_code_not_the_einvoice_one(self):
+        inv = make_invoice(supply_type="EXPWOP", currency="USD", exchange_rate=83)
+        inv["buyer"] = {"gstin": "URP", "legal_name": "GINEBRA SAN MIGUEL", "address": "1555 City of Mandaluyong", "city": "City of Mandaluyong NCR", "state_code": "96", "pincode": ""}
+        inv["place_of_supply"] = "96"
+        inv["items"][0].update({"igst_rate": 0, "igst_amount": 0}); inv["tax_totals"].update({"igst": 0, "invoice_total": 50000})
+        p = N.build_ewb_standalone(parse_invoice(inv))
+        self.assertEqual(p["toStateCode"], 99); self.assertEqual(p["actToStateCode"], 99); self.assertEqual(p["toGstin"], "URP"); self.assertEqual(p["toPincode"], 999999)
+        self.assertEqual(p["subSupplyType"], 3); self.assertEqual(p["fromStateCode"], 27)           # the supplier keeps its own Indian state
+        d = N.build_ewb_standalone(parse_invoice(make_invoice()))
+        self.assertEqual(d["toStateCode"], 29); self.assertEqual(d["actToStateCode"], 29)           # a domestic consignee is unchanged
+
     def test_multiple_lines_cgst_sgst_cess_and_credit_note(self):
         inv = make_invoice(igst=False, document_type="CRN", original_document_number="INV/OLD/1", original_document_date="2026-10-01")
         inv["items"].append({"line": 2, "item_code": "I2", "description": "Cap", "hsn_code": "39235090", "quantity": 10, "unit": "NOS", "unit_price": 100, "taxable_value": 1000,

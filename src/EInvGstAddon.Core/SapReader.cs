@@ -270,6 +270,9 @@ namespace EInvGstAddon.Core
                 if (string.IsNullOrEmpty(s.ShipTo.Name)) s.ShipTo.Name = s.CardName;
             }
 
+            var snap = One("SELECT CountryS,StateS,ZipCodeS FROM INV12 WHERE DocEntry=" + docEntry);
+            if (snap != null) { s.ShipSnapCountry = S(snap, "CountryS").ToUpperInvariant(); s.ShipSnapState = S(snap, "StateS").ToUpperInvariant(); s.ShipSnapZip = S(snap, "ZipCodeS"); }
+
             foreach (var r in _sql.Query("SELECT l.LineNum,l.ItemCode,l.Dscription,l.unitMsr,l.Quantity,l.Price,l.PriceBefDi,l.DiscPrcnt,l.LineTotal,h.ChapterID AS Hsn,sc.ServCode AS Sac " +
                                          "FROM INV1 l LEFT JOIN OCHP h ON h.AbsEntry=l.HsnEntry LEFT JOIN OSAC sc ON sc.AbsEntry=l.SacEntry WHERE l.DocEntry=" + docEntry + " AND ISNULL(l.TreeType,'N')<>'I' ORDER BY l.LineNum"))
                 s.Lines.Add(new GstLine { LineNum = I(r, "LineNum"), ItemCode = S(r, "ItemCode"), Description = S(r, "Dscription"), Uom = S(r, "unitMsr"), Quantity = D(r, "Quantity"), UnitPrice = D(r, "PriceBefDi") != 0 ? D(r, "PriceBefDi") : D(r, "Price"),

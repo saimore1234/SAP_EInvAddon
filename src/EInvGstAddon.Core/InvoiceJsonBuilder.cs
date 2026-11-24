@@ -38,6 +38,27 @@ namespace EInvGstAddon.Core
             return IndiaStates.ByAbbreviation.TryGetValue(p.StateCode ?? "", out code) ? code : "";
         }
 
+        /// <summary>
+        /// E-Way Bill only: the consignee (Ship-To) state must come from the Ship-To address SAVED ON THE INVOICE (INV12), falling back to the customer master only when the invoice has none.
+        /// A foreign consignee is not forced into an Indian state (the portal receives its "other country" code); an Indian one must resolve to a real GST state code. Nothing is defaulted.
+        /// </summary>
+        private static void CheckConsignee(GstSource s, AppConfig cfg, BuildResult r, string pos)
+        {
+            var party = s.ShipTo ?? s.Buyer;
+            string country = !string.IsNullOrEmpty(s.ShipSnapCountry) ? s.ShipSnapCountry : (party.CountryIso2 ?? "").ToUpperInvariant();
+            bool snapState = !string.IsNullOrEmpty(s.ShipSnapState);
+            string state = snapState ? s.ShipSnapState : (party.StateCode ?? "").ToUpperInvariant();
+            string source = snapState ? "INV12.StateS" : "CRD1.State (invoice has no saved Ship-To state)";
+            bool foreign = !string.IsNullOrEmpty(country) && country != "IN";
+            string resolved = foreign ? "(foreign)" : StateCode(new GstParty { Gstin = party.Gstin, StateCode = state }, cfg);
+            Logger.Info("ewb.consignee", "docEntry", s.DocEntry, "docNum", s.DocNum, "country", country, "state", state, "resolved", resolved, "source", source, "placeOfSupply", pos, "finalPayloadState", foreign ? "other-country" : resolved);
+            if (foreign) return;
+            if (string.IsNullOrEmpty(state) && string.IsNullOrEmpty(resolved))
+                r.Errors.Add("Consignee Ship-To State Code is missing or invalid. Please check the Ship-To address in the SAP Business One invoice.");
+            else if (string.IsNullOrEmpty(resolved))
+                r.Errors.Add("The Ship-To state '" + state + "' of the invoice has no GST state code mapping. Add it to the state mapping in GST Configuration, or correct the Ship-To address in the SAP Business One invoice.");
+        }
+
         private static JObject Party(GstParty p, AppConfig cfg, bool includeGstin = true)
         {
             string a1 = string.Join(", ", new[] { p.Building, p.StreetNo, p.Street, p.Block }.Where(x => !string.IsNullOrWhiteSpace(x)));
@@ -133,6 +154,7 @@ namespace EInvGstAddon.Core
             var buyer = Party(s.Buyer, cfg);
             if (export) { buyer["gstin"] = "URP"; buyer["state_code"] = "96"; buyer["pincode"] = ""; }
             string pos = export ? "96" : (!string.IsNullOrEmpty(s.ShipStateCode) ? StateCode(new GstParty { StateCode = s.ShipStateCode }, cfg) : "");
+            if (transport != null) CheckConsignee(s, cfg, r, pos);
             if (string.IsNullOrEmpty(pos)) pos = (string)buyer["state_code"];
 
             string currency = cfg.MapCurrency(s.DocCurrency);
