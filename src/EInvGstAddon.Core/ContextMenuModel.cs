@@ -10,7 +10,7 @@ namespace EInvGstAddon.Core
 
     public enum CtxAction
     {
-        // ERPNext / GST API
+        // GST Portal / GST API
         ValidateGst, SyncGst, History, RefreshGst,
         // E-Invoice
         ValidateEInv, GenerateEInv, ViewIrn, ViewAck, ViewQr, DownloadSigned, PrintEInv, RefreshIrn, CancelEInv,
@@ -30,14 +30,14 @@ namespace EInvGstAddon.Core
         public const string IdPrefix = "EINV_C_";
         public const string ParentMenuId = "1280";           // SAP "Data" menu: its sub-menus are what the right-click menu shows
 
-        public static readonly string[] Groups = { "ERPNext", "E-Invoice", "E-Way Bill" };
+        public static readonly string[] Groups = { "GST Portal", "E-Invoice", "E-Way Bill" };
 
         public static string GroupId(string group) { return RootId + "_" + group.Replace(" ", "").Replace("-", "").ToUpperInvariant(); }
 
         public static readonly List<CtxItem> Items = new List<CtxItem>
         {
-            I(CtxAction.ValidateGst, "Validate GST Invoice", "ERPNext"), I(CtxAction.SyncGst, "Synchronize GST Data / Send Request", "ERPNext"),
-            I(CtxAction.History, "View Integration History", "ERPNext"), I(CtxAction.RefreshGst, "Refresh GST Status", "ERPNext"),
+            I(CtxAction.ValidateGst, "Validate GST Invoice", "GST Portal"), I(CtxAction.SyncGst, "Synchronize GST Data / Send Request", "GST Portal"),
+            I(CtxAction.History, "View Integration History", "GST Portal"), I(CtxAction.RefreshGst, "Refresh GST Status", "GST Portal"),
             I(CtxAction.ValidateEInv, "Validate E-Invoice", "E-Invoice"), I(CtxAction.GenerateEInv, "Generate E-Invoice", "E-Invoice"),
             I(CtxAction.ViewIrn, "View IRN", "E-Invoice"), I(CtxAction.ViewAck, "View Acknowledgement", "E-Invoice"), I(CtxAction.ViewQr, "View QR Code", "E-Invoice"),
             I(CtxAction.DownloadSigned, "Download Signed Data", "E-Invoice"), I(CtxAction.PrintEInv, "Print", "E-Invoice"),
@@ -174,7 +174,7 @@ namespace EInvGstAddon.Core
             reason = null;
             if (f == null) { reason = "No active form."; return null; }
             if (f.FormType != ArInvoiceFormType || (f.ObjType != null && f.ObjType != ArInvoiceObjType)) { reason = "Not an A/R Invoice form."; return null; }
-            if (!hasConfig) { reason = "No active ERPNext configuration for this SAP company."; return null; }
+            if (!hasConfig) { reason = "No active GST Portal configuration for this SAP company."; return null; }
             if (!string.Equals(f.Database, configuredDatabase, StringComparison.OrdinalIgnoreCase)) { reason = "This SAP company is not the configured one."; return null; }
             if (f.DocEntry <= 0 || f.DocEntry > int.MaxValue) { reason = "The invoice has not been saved yet."; return null; }       // DocEntry identifies the document, never DocNum
             if (!string.Equals(f.Mode, "OK", StringComparison.OrdinalIgnoreCase)) { reason = "The invoice is not in view mode."; return null; }

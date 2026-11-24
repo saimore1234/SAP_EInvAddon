@@ -48,7 +48,7 @@ namespace EInvGstAddon.Common
         /// <summary>Only invoices with DocEntry >= this value are auto-synchronised (0 = set on first start to "next new invoice").</summary>
         public int SyncStartDocEntry { get; set; } = 0;
 
-        // ----- ERPNext defaults (all optional; blank = let ERPNext decide or stop with a clear message) -----
+        // ----- GST Portal defaults (all optional; blank = let GST Portal decide or stop with a clear message) -----
         public string SellingPriceList { get; set; } = "Standard Selling";
         public string SalesInvoiceSeries { get; set; } = "";
         public string RootWarehouse { get; set; } = "";
@@ -148,7 +148,7 @@ namespace EInvGstAddon.Common
         {
             string c = (ErpCompany ?? "").Trim();
             if (string.IsNullOrWhiteSpace(SapDatabase)) throw new InvalidOperationException("The SAP company database must be configured.");
-            if (string.IsNullOrWhiteSpace(IntegrationId)) throw new InvalidOperationException("The integration ID (ERPNext 'SAP Integration Profile') must be configured.");
+            if (string.IsNullOrWhiteSpace(IntegrationId)) throw new InvalidOperationException("The integration ID (GST Portal 'SAP Integration Profile') must be configured.");
             if (c.Length > 0 && ProtectedCompanies.Any(p => string.Equals(p, c, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Safety stop: '" + c + "' is listed as a protected company and cannot be the target of this configuration.");
         }

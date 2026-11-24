@@ -339,6 +339,36 @@ class EWayBillTests(Base):
         self.assertEqual(r["status"], "Failed"); self.assertIn("generate it again", r["message"])
         self.assertTrue(self.api.generate_e_waybill(req())["ok"])
 
+    def test_invalid_transporter_gstin_and_pincode_are_rejected_before_any_call(self):
+        inv = make_invoice(); inv["transport"] = {"vehicle_number": "MH04AB1234", "transporter_id": "NOTAGSTIN", "transport_mode": "Road", "distance": 10}
+        r = self.api.generate_e_waybill(req(inv))
+        self.assertIn("TRANSPORTER_ID", [e["code"] for e in r["errors"]])
+        inv = make_invoice(); inv["buyer"]["pincode"] = "12"
+        r = self.api.generate_e_waybill(req(inv))
+        self.assertFalse(r["ok"]); self.assertEqual(r["status"], C.ST_VALIDATION_FAILED)
+        self.assertEqual(self.calls, [])
+
+    def test_portal_rejection_shows_the_portal_message_and_can_be_retried(self):
+        self.gsp.behaviour["ewb_reject"] = "Vehicle number is invalid for the state"
+        r = self.api.generate_e_waybill(req())
+        self.assertFalse(r["ok"]); self.assertEqual(r["status"], C.ST_FAILED); self.assertIn("Vehicle number is invalid", r["message"]); self.assertEqual(r["data"]["error_code"], "604")
+        self.assertEqual(self.store.get(r["reference"])["processing_status"], C.ST_FAILED)
+        self.gsp.behaviour.clear()
+        again = self.api.generate_e_waybill(req())
+        self.assertTrue(again["ok"], again); self.assertTrue(again["data"]["ewb_no"])
+        self.assertEqual(self.calls, ["generate_ewb", "generate_ewb"])
+
+    def test_a_response_without_an_ewb_number_is_never_reported_as_success(self):
+        orig = self.gsp.generate_ewb
+        self.gsp.generate_ewb = lambda payload, with_irn: {"ewb_no": None, "ewb_date": None, "ewb_valid": None}
+        r = self.api.generate_e_waybill(req())
+        self.assertFalse(r["ok"]); self.assertEqual(self.store.get(r["reference"])["error_code"], "NO_EWB")
+        self.gsp.generate_ewb = orig
+
+    def test_logs_never_contain_credentials_for_ewb(self):
+        self.api.generate_e_waybill(req())
+        self.assertNotIn("secret", repr(self.logs).lower())
+
     def test_update_vehicle_and_transporter(self):
         self.api.generate_e_waybill(req()); self.calls.clear()
         v = self.api.update_vehicle({**req(), "vehicle_number": "MH12CD5678", "reason": "Due to Break Down", "remark": "tyre", "place": "Thane", "state_code": "27"})

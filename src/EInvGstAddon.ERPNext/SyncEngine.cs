@@ -48,7 +48,7 @@ namespace EInvGstAddon.ERPNext
                 var existing = _inv.FindExisting(inv.SyncReference);
                 if (existing != null)
                 {
-                    outcome.Warnings.Add("Existing ERPNext invoice found for " + inv.SyncReference + "; no new invoice created.");
+                    outcome.Warnings.Add("Existing GST Portal invoice found for " + inv.SyncReference + "; no new invoice created.");
                     return Finish(rec, inv, existing, outcome, true);
                 }
 
@@ -65,11 +65,11 @@ namespace EInvGstAddon.ERPNext
             catch (ErpUnavailableException ex)
             {
                 // Uncertain create result is resolved by FindExisting on the next attempt.
-                return Fail(rec, outcome, SyncStatus.Pending, "ERPNext unavailable: " + ex.Message, true);
+                return Fail(rec, outcome, SyncStatus.Pending, "GST Portal unavailable: " + ex.Message, true);
             }
-            catch (ErpAuthException ex) { return Fail(rec, outcome, SyncStatus.Failed, "Invalid ERPNext credentials/permissions: " + ex.Message, false); }
+            catch (ErpAuthException ex) { return Fail(rec, outcome, SyncStatus.Failed, "Invalid GST Portal credentials/permissions: " + ex.Message, false); }
             catch (ConfigurationException ex) { return Fail(rec, outcome, SyncStatus.Failed, ex.Message, false); }
-            catch (ErpApiException ex) { return Fail(rec, outcome, SyncStatus.Failed, "ERPNext rejected the request: " + ex.Message, false); }
+            catch (ErpApiException ex) { return Fail(rec, outcome, SyncStatus.Failed, "GST Portal rejected the request: " + ex.Message, false); }
             catch (Exception ex)
             {
                 Logger.Error("sync.unexpected", ex, "docEntry", docEntry);
@@ -86,7 +86,7 @@ namespace EInvGstAddon.ERPNext
         {
             string company = (string)erp["company"];
             if (company != null && !string.Equals(company, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase))
-                return Fail(rec, outcome, SyncStatus.Failed, "Safety stop: ERPNext invoice belongs to company '" + company + "'.", false);
+                return Fail(rec, outcome, SyncStatus.Failed, "Safety stop: GST Portal invoice belongs to company '" + company + "'.", false);
 
             // creation response of the REST API holds full data; for an existing one we have the summary fields
             outcome.ErpInvoice = (string)erp["name"];
@@ -99,7 +99,7 @@ namespace EInvGstAddon.ERPNext
             rec.Error = outcome.Warnings.Count == 0 ? "" : Util.Trunc(string.Join(" | ", outcome.Warnings.Where(w => !w.StartsWith("Company ")).ToArray()), 250);
             _store.SaveRecord(rec);
             outcome.Success = true; outcome.Status = SyncStatus.Synced;
-            outcome.Message = (wasExisting ? "Already in ERPNext as " : "Draft Sales Invoice created: ") + outcome.ErpInvoice;
+            outcome.Message = (wasExisting ? "Already in GST Portal as " : "Draft Sales Invoice created: ") + outcome.ErpInvoice;
             Logger.Info("sync.done", "docEntry", inv.DocEntry, "erp", outcome.ErpInvoice, "existing", wasExisting, "total", outcome.ErpGrandTotal);
             return outcome;
         }

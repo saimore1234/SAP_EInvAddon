@@ -149,7 +149,7 @@ namespace EInvGstAddon.Tests
             var t = Make(); t.cfg.FreightAccount = "";
             t.sap.Invoices[1].Freight = 100;
             var o = t.e.Process(1);
-            Assert.False(o.Success); Assert.Contains("No ERPNext account is configured", o.Message);
+            Assert.False(o.Success); Assert.Contains("No GST Portal account is configured", o.Message);
         }
     }
 }

@@ -35,7 +35,7 @@ namespace EInvGstAddon.ERPNext
             if (_company == null)
             {
                 _company = _erp.GetDoc("Company", _erp.Config.ErpCompany);
-                if (_company == null) throw new ConfigurationException("ERPNext company '" + _erp.Config.ErpCompany + "' does not exist on " + _erp.Config.ErpUrl + ".");
+                if (_company == null) throw new ConfigurationException("GST Portal company '" + _erp.Config.ErpCompany + "' does not exist on " + _erp.Config.ErpUrl + ".");
             }
             return _company;
         }
@@ -45,7 +45,7 @@ namespace EInvGstAddon.ERPNext
         private string FirstLeaf(string doctype, string nameField)
         {
             var l = _erp.GetList(doctype, new[] { "name" }, new object[] { new object[] { "is_group", "=", 0 } }, 1);
-            if (l.Count == 0) throw new ConfigurationException("ERPNext has no " + doctype + " to use; configure a default in the add-on settings.");
+            if (l.Count == 0) throw new ConfigurationException("GST Portal has no " + doctype + " to use; configure a default in the add-on settings.");
             return (string)l[0]["name"];
         }
         public string LeafGroup(string doctype) { return FirstLeaf(doctype, "name"); }
@@ -71,7 +71,7 @@ namespace EInvGstAddon.ERPNext
             string c;
             if (_plCurrency.TryGetValue(priceList, out c)) return c;
             var d = _erp.GetDoc("Price List", priceList);
-            if (d == null) throw new ConfigurationException("Selling price list '" + priceList + "' does not exist in ERPNext. Choose an existing one in the add-on settings.");
+            if (d == null) throw new ConfigurationException("Selling price list '" + priceList + "' does not exist in GST Portal. Choose an existing one in the add-on settings.");
             c = (string)d["currency"];
             _plCurrency[priceList] = c;
             return c;
@@ -151,7 +151,7 @@ namespace EInvGstAddon.ERPNext
                 ok = d != null && (int)d["enabled"] == 1;
                 _currency[iso] = ok;
             }
-            if (!ok) throw new ConfigurationException("Currency '" + iso + "' does not exist or is disabled in ERPNext. Enable it in ERPNext (Currency list) before synchronising this invoice.");
+            if (!ok) throw new ConfigurationException("Currency '" + iso + "' does not exist or is disabled in GST Portal. Enable it in GST Portal (Currency list) before synchronising this invoice.");
         }
     }
 
@@ -179,7 +179,7 @@ namespace EInvGstAddon.ERPNext
             if (found.Count > 0)
             {
                 string n = (string)found[0]["name"];
-                _store.SaveCustomerMap(new MapEntry { SapKey = bp.CardCode, ErpName = n, Created = "N", Note = "linked by ERPNext custom field" });
+                _store.SaveCustomerMap(new MapEntry { SapKey = bp.CardCode, ErpName = n, Created = "N", Note = "linked by GST Portal custom field" });
                 return n;
             }
 
@@ -207,7 +207,7 @@ namespace EInvGstAddon.ERPNext
                 catch (ConfigurationException) { outcome.Warnings.Add("Customer currency " + cur + " is not enabled in ERPNext; default currency not set."); }
             }
             if (!string.IsNullOrEmpty(bp.PaymentTerms) && _erp.Exists("Payment Terms Template", bp.PaymentTerms)) doc["payment_terms"] = bp.PaymentTerms;
-            else if (!string.IsNullOrEmpty(bp.PaymentTerms)) outcome.Warnings.Add("Payment terms '" + bp.PaymentTerms + "' have no ERPNext Payment Terms Template; not set on customer.");
+            else if (!string.IsNullOrEmpty(bp.PaymentTerms)) outcome.Warnings.Add("Payment terms '" + bp.PaymentTerms + "' have no GST Portal Payment Terms Template; not set on customer.");
 
             var created = _erp.Insert("Customer", doc);
             string name = (string)created["name"];
@@ -301,17 +301,17 @@ namespace EInvGstAddon.ERPNext
                 if (m == null || m.ErpName != erpCode)
                 {
                     bool ours = (string)existing["custom_sap_database"] == _cfg.SapDatabase;
-                    _store.SaveItemMap(new MapEntry { SapKey = sapItemCode, ErpName = erpCode, Created = "N", Note = ours ? "linked (SAP reference present)" : "pre-existing ERPNext item reused, not modified" });
-                    if (!ours) outcome.Warnings.Add("Item '" + sapItemCode + "' already existed in ERPNext without SAP reference; reused unchanged.");
+                    _store.SaveItemMap(new MapEntry { SapKey = sapItemCode, ErpName = erpCode, Created = "N", Note = ours ? "linked (SAP reference present)" : "pre-existing GST Portal item reused, not modified" });
+                    if (!ours) outcome.Warnings.Add("Item '" + sapItemCode + "' already existed in GST Portal without SAP reference; reused unchanged.");
                 }
                 if (string.IsNullOrEmpty((string)existing["gst_hsn_code"]))
                 {
-                    // ERPNext (GST Settings: validate HSN) rejects invoices for items without HSN/SAC.
+                    // GST Portal (GST Settings: validate HSN) rejects invoices for items without HSN/SAC.
                     bool ours = (string)existing["custom_sap_database"] == _cfg.SapDatabase;
                     var sapItem = _sap.GetItem(sapItemCode);
                     string hsn = ResolveHsn(sapItem, outcome);
                     if (hsn == null || !ours)
-                        throw new ConfigurationException("Item '" + sapItemCode + "' has no HSN/SAC in ERPNext" + (hsn == null ? " and SAP has no usable HSN/SAC for it (SAP: '" + (string.IsNullOrEmpty(sapItem.Hsn) ? sapItem.Sac : sapItem.Hsn) + "')." : "; it was not created by this add-on so it is not modified - set the HSN in ERPNext (suggested " + hsn + ")."));
+                        throw new ConfigurationException("Item '" + sapItemCode + "' has no HSN/SAC in GST Portal" + (hsn == null ? " and SAP has no usable HSN/SAC for it (SAP: '" + (string.IsNullOrEmpty(sapItem.Hsn) ? sapItem.Sac : sapItem.Hsn) + "')." : "; it was not created by this add-on so it is not modified - set the HSN in GST Portal (suggested " + hsn + ")."));
                     _erp.Update("Item", erpCode, new JObject { ["gst_hsn_code"] = hsn });      // only the add-on's own item, only this field
                     Logger.Info("item.hsn.updated", "item", erpCode, "hsn", hsn);
                 }
@@ -335,11 +335,11 @@ namespace EInvGstAddon.ERPNext
                 ["custom_sap_database"] = _cfg.SapDatabase,
                 ["custom_sap_item_code"] = it.ItemCode
             };
-            if (it.ItemCode.Length > 140) throw new ConfigurationException("SAP item code '" + it.ItemCode + "' is longer than ERPNext's 140 character limit.");
+            if (it.ItemCode.Length > 140) throw new ConfigurationException("SAP item code '" + it.ItemCode + "' is longer than GST Portal's 140 character limit.");
 
             string hsnCode = ResolveHsn(it, outcome);
             if (hsnCode == null)
-                throw new ConfigurationException("Item '" + it.ItemCode + "' has no usable HSN/SAC (SAP value '" + (string.IsNullOrEmpty(it.Hsn) ? it.Sac : it.Hsn) + "' is empty or not in ERPNext's GST HSN Code list). ERPNext requires one on every invoice item; set the HSN/SAC on the item in SAP. Nothing was created.");
+                throw new ConfigurationException("Item '" + it.ItemCode + "' has no usable HSN/SAC (SAP value '" + (string.IsNullOrEmpty(it.Hsn) ? it.Sac : it.Hsn) + "' is empty or not in GST Portal's GST HSN Code list). GST Portal requires one on every invoice item; set the HSN/SAC on the item in SAP. Nothing was created.");
             doc["gst_hsn_code"] = hsnCode;
 
             if (!string.IsNullOrEmpty(it.DefaultWarehouse))
@@ -382,8 +382,8 @@ namespace EInvGstAddon.ERPNext
 
         private static void VerifyReusable(JObject item, string code)
         {
-            if ((int)(item["disabled"] ?? 0) == 1) throw new ConfigurationException("ERPNext item '" + code + "' is disabled. Enable it or map the SAP item to another ERPNext item.");
-            if ((int)(item["is_sales_item"] ?? 1) == 0) throw new ConfigurationException("ERPNext item '" + code + "' is not marked as a Sales Item. Enable 'Allow to be sold' on it in ERPNext.");
+            if ((int)(item["disabled"] ?? 0) == 1) throw new ConfigurationException("GST Portal item '" + code + "' is disabled. Enable it or map the SAP item to another GST Portal item.");
+            if ((int)(item["is_sales_item"] ?? 1) == 0) throw new ConfigurationException("GST Portal item '" + code + "' is not marked as a Sales Item. Enable 'Allow to be sold' on it in GST Portal.");
         }
     }
 
@@ -439,7 +439,7 @@ namespace EInvGstAddon.ERPNext
         public string Validate(string erpWarehouse, string sapCode)
         {
             var d = _erp.GetDoc("Warehouse", erpWarehouse);
-            if (d == null) throw new ConfigurationException("Mapped ERPNext warehouse '" + erpWarehouse + "' (SAP " + sapCode + ") does not exist.");
+            if (d == null) throw new ConfigurationException("Mapped GST Portal warehouse '" + erpWarehouse + "' (SAP " + sapCode + ") does not exist.");
             string owner = (string)d["company"];
             if (!string.Equals(owner, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase))
                 throw new ConfigurationException("Warehouse '" + erpWarehouse + "' (mapped from SAP " + sapCode + ") belongs to company '" + owner + "', not '" + _cfg.ErpCompany + "'. It will not be used.");

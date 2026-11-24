@@ -35,7 +35,7 @@ namespace EInvGstAddon.Tests
             Assert.Equal(22, CtxMenuDefinition.Items.Count);
             Assert.Equal(22, CtxMenuDefinition.Items.Select(i => i.Id).Distinct().Count());
             Assert.All(CtxMenuDefinition.Items, i => Assert.StartsWith("EINV_C_", i.Id));
-            Assert.Equal(4, CtxMenuDefinition.Items.Count(i => i.Group == "ERPNext"));
+            Assert.Equal(4, CtxMenuDefinition.Items.Count(i => i.Group == "GST Portal"));
             Assert.Equal(9, CtxMenuDefinition.Items.Count(i => i.Group == "E-Invoice"));
             Assert.Equal(9, CtxMenuDefinition.Items.Count(i => i.Group == "E-Way Bill"));
             foreach (var caption in new[] { "Validate GST Invoice", "Synchronize GST Data / Send Request", "View Integration History", "Refresh GST Status", "View IRN", "View Acknowledgement", "View QR Code", "Download Signed Data", "Refresh IRN Status", "Update Vehicle", "Update Transporter", "Cancel EWB", "View EWB Details" })
@@ -279,7 +279,7 @@ namespace EInvGstAddon.Tests
             var t = Make();
             t.erp.Seed("Sales Invoice", "OTHER-1", new JObject { ["company"] = "Tint Tech Coatings Private Limited", ["docstatus"] = 1 });
             var r = t.g.ValidateEInvoiceReport("OTHER-1");
-            Assert.False(Look(r)["ERPNext invoice mapping"].Ok);
+            Assert.False(Look(r)["GST Portal invoice mapping"].Ok);
             Assert.DoesNotContain(r, x => x.Name == "Supplier GSTIN");
         }
 
@@ -288,7 +288,7 @@ namespace EInvGstAddon.Tests
         {
             var t = Make(); t.erp.Down = true;
             var r = t.g.ValidateEInvoiceReport(t.inv);
-            Assert.Single(r); Assert.False(r[0].Ok); Assert.Equal("ERPNext connection", r[0].Name);
+            Assert.Single(r); Assert.False(r[0].Ok); Assert.Equal("GST Portal connection", r[0].Name);
         }
 
         [Fact]

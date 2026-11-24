@@ -83,14 +83,14 @@ namespace EInvGstAddon.ERPNext
 
             var taxes = BuildTaxes(inv);
 
-            // ERPNext holds rates at a fixed precision (e.g. 2 decimals) while SAP allows 0.158. Predict the loss and carry the
-            // exact difference on the round-off account so the ERPNext totals equal the SAP totals; always reported as a warning.
+            // GST Portal holds rates at a fixed precision (e.g. 2 decimals) while SAP allows 0.158. Predict the loss and carry the
+            // exact difference on the round-off account so the GST Portal totals equal the SAP totals; always reported as a warning.
             decimal precisionDiff = PrecisionDifference(inv, _cfg.RatePrecision);
             if (precisionDiff != 0)
             {
                 RequireAccount(_cfg.RoundOffAccount, "unit price precision difference");
-                taxes.Add(Row(_cfg.RoundOffAccount, "SAP unit price precision difference (ERPNext rate precision " + _cfg.RatePrecision + ")", precisionDiff));
-                outcome.Warnings.Add("ERPNext rate precision (" + _cfg.RatePrecision + " decimals) cannot hold some SAP unit prices; difference of " + precisionDiff.ToString("0.00", CultureInfo.InvariantCulture) + " carried on " + _cfg.RoundOffAccount + " so totals equal SAP.");
+                taxes.Add(Row(_cfg.RoundOffAccount, "SAP unit price precision difference (GST Portal rate precision " + _cfg.RatePrecision + ")", precisionDiff));
+                outcome.Warnings.Add("GST Portal rate precision (" + _cfg.RatePrecision + " decimals) cannot hold some SAP unit prices; difference of " + precisionDiff.ToString("0.00", CultureInfo.InvariantCulture) + " carried on " + _cfg.RoundOffAccount + " so totals equal SAP.");
             }
 
             string remarks = "SAP " + inv.Database + " A/R Invoice " + inv.DocNum + " (DocEntry " + inv.DocEntry + ")";
@@ -154,7 +154,7 @@ namespace EInvGstAddon.ERPNext
             var unmapped = byType.Where(g => !_cfg.TaxAccountMap.ContainsKey(g.Key)).ToList();
             if (unmapped.Count > 0)
                 throw new ConfigurationException("Tax configuration missing: SAP tax type(s) " + string.Join(", ", unmapped.Select(g => g.Key + " (" + g.First().TaxCode + ", " + g.Sum(x => x.Amount).ToString("0.00", CultureInfo.InvariantCulture) + ")")) +
-                    " on invoice " + inv.DocNum + " have no ERPNext account in TaxAccountMap. Nothing was created.");
+                    " on invoice " + inv.DocNum + " have no GST Portal account in TaxAccountMap. Nothing was created.");
             foreach (var g in byType)
             {
                 string acct = _cfg.TaxAccountMap[g.Key];
@@ -192,9 +192,9 @@ namespace EInvGstAddon.ERPNext
 
         private void RequireAccount(string account, string what)
         {
-            if (string.IsNullOrWhiteSpace(account)) throw new ConfigurationException("No ERPNext account is configured for " + what + ". Set it in the add-on settings (Tax && Account mapping); it is never guessed.");
+            if (string.IsNullOrWhiteSpace(account)) throw new ConfigurationException("No GST Portal account is configured for " + what + ". Set it in the add-on settings (Tax && Account mapping); it is never guessed.");
             string owner = _lk.AccountCompany(account);
-            if (owner == null) throw new ConfigurationException("ERPNext account '" + account + "' (" + what + ") does not exist. Create it in ERPNext or change the add-on configuration; it is never invented.");
+            if (owner == null) throw new ConfigurationException("GST Portal account '" + account + "' (" + what + ") does not exist. Create it in GST Portal or change the add-on configuration; it is never invented.");
             if (!string.Equals(owner, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase))
                 throw new ConfigurationException("Account '" + account + "' belongs to '" + owner + "', not '" + _cfg.ErpCompany + "'. Refusing to use it.");
         }
@@ -204,7 +204,7 @@ namespace EInvGstAddon.ERPNext
         {
             var diffs = new List<string>();
             decimal erpTotal = erp["rounded_total"] != null && (decimal)erp["rounded_total"] != 0 ? (decimal)erp["rounded_total"] : (decimal)erp["grand_total"];
-            if (Math.Abs(erpTotal - inv.DocTotal) > 0.02m) diffs.Add("Total differs: SAP " + inv.DocTotal.ToString("0.00", CultureInfo.InvariantCulture) + " vs ERPNext " + erpTotal.ToString("0.00", CultureInfo.InvariantCulture));
+            if (Math.Abs(erpTotal - inv.DocTotal) > 0.02m) diffs.Add("Total differs: SAP " + inv.DocTotal.ToString("0.00", CultureInfo.InvariantCulture) + " vs GST Portal " + erpTotal.ToString("0.00", CultureInfo.InvariantCulture));
             return diffs;
         }
     }

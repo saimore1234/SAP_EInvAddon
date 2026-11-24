@@ -36,7 +36,7 @@ namespace EInvGstAddon.ERPNext
         {
             string baseUrl = (_cfg.ErpUrl ?? "").TrimEnd('/');
             if (!baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !baseUrl.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase) && !baseUrl.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
-                throw new ConfigurationException("ERPNext URL must use HTTPS.");
+                throw new ConfigurationException("GST Portal URL must use HTTPS.");
             var sb = new StringBuilder(baseUrl).Append(path);
             if (query != null && query.Count > 0)
                 sb.Append('?').Append(string.Join("&", query.Select(kv => Uri.EscapeDataString(kv.Key) + "=" + Uri.EscapeDataString(kv.Value))));
@@ -48,7 +48,7 @@ namespace EInvGstAddon.ERPNext
         private JToken Send(HttpMethod method, string path, IDictionary<string, string> query, JObject body)
         {
             if (string.IsNullOrEmpty(_cfg.ApiKey) || string.IsNullOrEmpty(_cfg.ApiSecret))
-                throw new ErpAuthException("ERPNext API key/secret are not configured.");
+                throw new ErpAuthException("GST Portal API key/secret are not configured.");
             if (method != HttpMethod.Get) Guard(path, body);
 
             var req = new HttpRequestMessage(method, Url(path, query));
@@ -66,8 +66,8 @@ namespace EInvGstAddon.ERPNext
                 resp = _http.SendAsync(req).GetAwaiter().GetResult();
                 text = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             }
-            catch (TaskCanceledException ex) { throw new ErpUnavailableException("ERPNext request timed out.", ex); }
-            catch (HttpRequestException ex) { throw new ErpUnavailableException("ERPNext is not reachable: " + ex.Message, ex); }
+            catch (TaskCanceledException ex) { throw new ErpUnavailableException("GST Portal request timed out.", ex); }
+            catch (HttpRequestException ex) { throw new ErpUnavailableException("GST Portal is not reachable: " + ex.Message, ex); }
             catch (Exception ex) when (ex is System.IO.IOException || ex is WebException) { throw new ErpUnavailableException("Network failure: " + ex.Message, ex); }
 
             int code = (int)resp.StatusCode;
@@ -75,12 +75,12 @@ namespace EInvGstAddon.ERPNext
             if (code >= 200 && code < 300)
             {
                 try { return string.IsNullOrWhiteSpace(text) ? new JObject() : JToken.Parse(text); }
-                catch (JsonException) { throw new ErpUnavailableException("ERPNext returned a non-JSON response (HTTP " + code + ")."); }
+                catch (JsonException) { throw new ErpUnavailableException("GST Portal returned a non-JSON response (HTTP " + code + ")."); }
             }
             if (code == 401 || code == 403)
-                throw new ErpAuthException("ERPNext rejected the API credentials/permissions (HTTP " + code + "): " + ExtractMessage(text));
+                throw new ErpAuthException("GST Portal rejected the API credentials/permissions (HTTP " + code + "): " + ExtractMessage(text));
             if (code == 429 || code >= 500)
-                throw new ErpUnavailableException("ERPNext unavailable (HTTP " + code + "): " + ExtractMessage(text));
+                throw new ErpUnavailableException("GST Portal unavailable (HTTP " + code + "): " + ExtractMessage(text));
             throw new ErpApiException(ExtractMessage(text), code, ExcType(text));
         }
 
@@ -210,12 +210,12 @@ namespace EInvGstAddon.ERPNext
                 int code = (int)resp.StatusCode;
                 if (code >= 200 && code < 300) return bytes;
                 string text = Encoding.UTF8.GetString(bytes);
-                if (code == 401 || code == 403) throw new ErpAuthException("ERPNext rejected the request (HTTP " + code + "): " + ExtractMessage(text));
-                if (code == 429 || code >= 500) throw new ErpUnavailableException("ERPNext unavailable (HTTP " + code + ").");
+                if (code == 401 || code == 403) throw new ErpAuthException("GST Portal rejected the request (HTTP " + code + "): " + ExtractMessage(text));
+                if (code == 429 || code >= 500) throw new ErpUnavailableException("GST Portal unavailable (HTTP " + code + ").");
                 throw new ErpApiException(ExtractMessage(text), code, ExcType(text));
             }
-            catch (TaskCanceledException ex) { throw new ErpUnavailableException("ERPNext request timed out.", ex); }
-            catch (HttpRequestException ex) { throw new ErpUnavailableException("ERPNext is not reachable: " + ex.Message, ex); }
+            catch (TaskCanceledException ex) { throw new ErpUnavailableException("GST Portal request timed out.", ex); }
+            catch (HttpRequestException ex) { throw new ErpUnavailableException("GST Portal is not reachable: " + ex.Message, ex); }
         }
 
         public JArray GetList(string doctype, string[] fields, object filters = null, int limit = 500, string orderBy = null)

@@ -25,20 +25,20 @@ namespace EInvGstAddon.Database
         {
             var log = new List<string>();
             // --- UDTs ---
-            EnsureTable(Constants.UdtSync, "ERPNext invoice sync", log);
-            EnsureTable(Constants.UdtCustMap, "ERPNext customer map", log);
-            EnsureTable(Constants.UdtItemMap, "ERPNext item map", log);
-            EnsureTable(Constants.UdtWhsMap, "ERPNext warehouse map", log);
+            EnsureTable(Constants.UdtSync, "GST Portal invoice sync", log);
+            EnsureTable(Constants.UdtCustMap, "GST Portal customer map", log);
+            EnsureTable(Constants.UdtItemMap, "GST Portal item map", log);
+            EnsureTable(Constants.UdtWhsMap, "GST Portal warehouse map", log);
 
             EnsureFields("@" + Constants.UdtSync, new[]
             {
                 new Fld("DocEntry", "SAP DocEntry", BoFieldTypes.db_Numeric, 11),
                 new Fld("DocNum", "SAP DocNum", BoFieldTypes.db_Numeric, 11),
-                A("ConfigId", "Configuration Id", 20), A("Database", "SAP Database", 30), A("ErpInv", "ERPNext Invoice ID", 60), A("Customer", "Customer Mapping", 140),
+                A("ConfigId", "Configuration Id", 20), A("Database", "SAP Database", 30), A("ErpInv", "GST Portal Invoice ID", 60), A("Customer", "Customer Mapping", 140),
                 A("Status", "Sync Status", 20), A("SyncTs", "Sync Date/Time", 20), A("Error", "Error Message", 254),
                 new Fld("Retry", "Retry Count", BoFieldTypes.db_Numeric, 5)
             }, log);
-            var mapFields = new[] { A("ConfigId", "Configuration Id", 20), A("SapKey", "SAP Key", 100), A("ErpName", "ERPNext Name", 140), A("Created", "Created By Add-on", 1), A("Note", "Note", 254) };
+            var mapFields = new[] { A("ConfigId", "Configuration Id", 20), A("SapKey", "SAP Key", 100), A("ErpName", "GST Portal Name", 140), A("Created", "Created By Add-on", 1), A("Note", "Note", 254) };
             EnsureFields("@" + Constants.UdtCustMap, mapFields, log);
             EnsureFields("@" + Constants.UdtItemMap, mapFields, log);
             EnsureFields("@" + Constants.UdtWhsMap, mapFields, log);
@@ -46,15 +46,15 @@ namespace EInvGstAddon.Database
             // --- UDFs on A/R Invoice (OINV) ---
             EnsureFields("OINV", new[]
             {
-                A(Constants.UdfErpDoc, "ERPNext Invoice", 60), A(Constants.UdfErpStatus, "ERPNext Sync Status", 20),
+                A(Constants.UdfErpDoc, "GST Portal Invoice", 60), A(Constants.UdfErpStatus, "GST Portal Sync Status", 20),
                 A(Constants.UdfLastSync, "Last Sync", 20), A(Constants.UdfSyncError, "Sync Error", 254)
             }, log);
             // --- GST documents (large signed payloads only in memo fields of this UDT; SAP standard tables stay untouched) ---
-            EnsureTable(Constants.UdtDocs, "ERPNext GST documents", log);
+            EnsureTable(Constants.UdtDocs, "GST Portal GST documents", log);
             EnsureFields("@" + Constants.UdtDocs, new[]
             {
                 A("ConfigId", "Configuration Id", 20), new Fld("DocEntry", "SAP DocEntry", BoFieldTypes.db_Numeric, 11), new Fld("DocNum", "SAP DocNum", BoFieldTypes.db_Numeric, 11),
-                A("ErpInv", "ERPNext Invoice ID", 60), A("Customer", "Customer", 100), A("Gstin", "Customer GSTIN", 20), A("InvDate", "Invoice Date", 10),
+                A("ErpInv", "GST Portal Invoice ID", 60), A("Customer", "Customer", 100), A("Gstin", "Customer GSTIN", 20), A("InvDate", "Invoice Date", 10),
                 new Fld("Taxable", "Taxable Amount", BoFieldTypes.db_Float, 0, BoFldSubTypes.st_Sum), new Fld("GstAmt", "GST Amount", BoFieldTypes.db_Float, 0, BoFldSubTypes.st_Sum),
                 A("EInvStatus", "IRN Status", 20), A("Irn", "IRN", 64), A("AckNo", "Ack Number", 30), A("AckDate", "Ack Date", 20),
                 new Fld("SignedQr", "Signed QR Code", BoFieldTypes.db_Memo, 0), new Fld("SignedInv", "Signed Invoice", BoFieldTypes.db_Memo, 0),

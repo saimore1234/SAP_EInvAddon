@@ -38,7 +38,7 @@ namespace EInvGstAddon.UI
                 Button("a" + (int)acts[i], it.Caption, 15 + (i % 3) * 200, y + (i / 3) * 26, 190);
             }
             y += ((acts.Length + 2) / 3) * 26 + 8;
-            Static("lMsg", "These buttons run the same actions as the A/R Invoice right-click menu. Nothing is created in ERPNext besides the GST transaction record.", 15, y, 600);
+            Static("lMsg", "These buttons run the same actions as the A/R Invoice right-click menu. Nothing is created in GST Portal besides the GST transaction record.", 15, y, 600);
         }
 
         private void Load()
@@ -196,7 +196,7 @@ namespace EInvGstAddon.UI
             Check("kAI", "Automatic E-Invoice generation (after validation)", 175, y, 380); y += 20;
             Check("kAW", "Automatic E-Way Bill generation (after validation)", 175, y, 380); y += 24;
             Static("a10", "GSP / ASP status", 15, y, 150); Static("vS", "", 175, y, 420); y += 24;
-            Button("bVal", "Validate against ERPNext", 15, y, 170); Button("bSave", "Save", 190, y, 90); y += 28;
+            Button("bVal", "Validate against GST Portal", 15, y, 170); Button("bSave", "Save", 190, y, 90); y += 28;
             MultiLine("eLog", 15, y, 600, 110);
             Load();
         }
@@ -208,7 +208,7 @@ namespace EInvGstAddon.UI
             Set("eA", c.GstAddress); Set("eCity", c.GstCity); Set("eP", c.GstPin); Set("ePos", c.DefaultPlaceOfSupply); Set("cE", c.Environment);
             Set("kI", c.EInvoiceEnabled ? "Y" : "N"); Set("kW", c.EWayBillEnabled ? "Y" : "N"); Set("kAI", c.AutoEInvoice ? "Y" : "N"); Set("kAW", c.AutoEWayBill ? "Y" : "N");
             Caption("vS", c.GspStatus);
-            Set("eLog", "The GSP credentials are configured in ERPNext (GST Settings), never here. Validation checks the integration profile, the GSTIN and the sandbox/production consistency on the ERPNext site.");
+            Set("eLog", "The GSP credentials are configured in GST Portal (GST Settings), never here. Validation checks the integration profile, the GSTIN and the sandbox/production consistency on the GST Portal server.");
         }
 
         private string Problems()
@@ -239,27 +239,27 @@ namespace EInvGstAddon.UI
                         string pr = Problems(); if (pr.Length > 0) { Log("eLog", pr); return; }
                         var tmp = Svc.Cfg.Clone(); tmp.SupplierGstin = Get("eG").ToUpperInvariant(); tmp.Environment = Get("cE");
                         string gstin = tmp.SupplierGstin;
-                        Log("eLog", "Validating against ERPNext ...");
+                        Log("eLog", "Validating against GST Portal ...");
                         Svc.Background("gst-validate-config", () => { using (var c = new ErpClient(tmp)) return new GstGateway(c).Ping(); }, p =>
                         {
                             var errs = new List<string>();
                             var prof = p["profile"];
                             if (string.IsNullOrEmpty(gstin)) errs.Add("Enter the seller GSTIN.");
-                            if (prof == null || prof.Type == Newtonsoft.Json.Linq.JTokenType.Null) errs.Add("No 'SAP Integration Profile' named " + tmp.IntegrationId + " exists on the ERPNext site.");
+                            if (prof == null || prof.Type == Newtonsoft.Json.Linq.JTokenType.Null) errs.Add("No integration profile named " + tmp.IntegrationId + " exists on the GST Portal server.");
                             else
                             {
                                 if ((bool?)prof["enabled"] != true) errs.Add("The integration profile is disabled.");
                                 if ((bool?)prof["api_user_matches"] != true) errs.Add("The integration profile is bound to a different API user.");
-                                if ((bool?)prof["environment_consistent"] != true) errs.Add("The profile environment (" + prof["environment"] + ") does not match the ERPNext GST Settings sandbox mode.");
+                                if ((bool?)prof["environment_consistent"] != true) errs.Add("The profile environment (" + prof["environment"] + ") does not match the GST Portal Settings sandbox mode.");
                                 if (!string.Equals((string)prof["environment"], tmp.Environment, StringComparison.OrdinalIgnoreCase)) errs.Add("The environment here (" + tmp.Environment + ") differs from the profile (" + prof["environment"] + ").");
                                 if (!string.Equals((string)prof["sap_database"], tmp.SapDatabase, StringComparison.OrdinalIgnoreCase)) errs.Add("The profile belongs to another SAP database (" + prof["sap_database"] + ").");
                             }
                             string ic = (string)p["india_compliance"];
-                            if (string.IsNullOrEmpty(ic)) errs.Add("The India Compliance GST app is not installed on the ERPNext site.");
-                            else if (!ic.StartsWith("15.", StringComparison.Ordinal)) errs.Add("India Compliance " + ic + " is not supported (15.x verified).");
+                            if (string.IsNullOrEmpty(ic)) errs.Add("The GST service is not installed on the GST Portal server.");
+                            else if (!ic.StartsWith("15.", StringComparison.Ordinal)) errs.Add("GST service version " + ic + " is not supported (15.x verified).");
                             Svc.Cfg.GspStatus = errs.Count == 0 ? "Configured" : "Not validated";
                             Caption("vS", Svc.Cfg.GspStatus);
-                            Log("eLog", errs.Count == 0 ? "Validation OK (India Compliance " + ic + ", GST Settings " + ((bool?)p["gst_sandbox_mode"] == true ? "sandbox" : "production") + ")." : "Validation FAILED: " + string.Join("; ", errs));
+                            Log("eLog", errs.Count == 0 ? "Validation OK (GST service " + ic + ", GST Settings " + ((bool?)p["gst_sandbox_mode"] == true ? "sandbox" : "production") + ")." : "Validation FAILED: " + string.Join("; ", errs));
                         }, ex => Log("eLog", "Validation error: " + ex.Message));
                         break;
                     }

@@ -64,7 +64,7 @@ namespace EInvGstAddon.ERPNext
             var res = _erp.CallPost(ApiModule + endpoint, body);
             long ms = sw.ElapsedMilliseconds;
             var m = res == null ? null : res["message"] as JObject;
-            if (m == null) throw new ErpApiException("The ERPNext GST API returned an unexpected response (is the sap_b1_direct_integration app installed?).", 0, null);
+            if (m == null) throw new ErpApiException("The GST Portal GST API returned an unexpected response (is the sap_b1_direct_integration app installed?).", 0, null);
             var r = new GstApiResult
             {
                 Ok = (bool?)m["ok"] ?? false, Status = (string)m["status"] ?? "", RequestId = (string)m["request_id"] ?? "", Reference = (string)m["reference"] ?? "", Message = (string)m["message"] ?? "",
@@ -85,7 +85,7 @@ namespace EInvGstAddon.ERPNext
         private void Preflight()
         {
             try { _cfg.ValidateTarget(); } catch (InvalidOperationException ex) { throw new ConfigurationException(ex.Message); }
-            if (string.IsNullOrWhiteSpace(_cfg.ErpUrl)) throw new ConfigurationException("The ERPNext URL is not configured.");
+            if (string.IsNullOrWhiteSpace(_cfg.ErpUrl)) throw new ConfigurationException("The GST Portal URL is not configured.");
         }
 
         // ------------------------------------------------------------------------------------------------ operations

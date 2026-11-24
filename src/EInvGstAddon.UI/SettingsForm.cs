@@ -21,15 +21,15 @@ namespace EInvGstAddon.UI
 
         public SettingsForm(AddonServices svc) : base(svc)
         {
-            Create(Type, "ERPNext Connection Settings", 720, 520);
+            Create(Type, "GST Portal Connection Settings", 720, 520);
             Static("lP", "Configuration", 15, 12, 90); Combo("cP", 110, 10, 330); Button("bNew", "New", 450, 9, 60);
             int y = 40;
             Static("l1", "Configuration name", 15, y, 130); Edit("eNm", 150, y, 210); Static("r1", "SAP company database", 380, y, 130); Edit("eDb", 515, y, 180); y += 22;
-            Static("l2", "ERPNext base URL (https)", 15, y, 130); Edit("eUrl", 150, y, 210); Static("r2", "ERPNext site (optional)", 380, y, 130); Edit("eSite", 515, y, 180); y += 22;
+            Static("l2", "GST Portal base URL (https)", 15, y, 130); Edit("eUrl", 150, y, 210); Static("r2", "GST Portal server (optional)", 380, y, 130); Edit("eSite", 515, y, 180); y += 22;
             Static("l3", "API key", 15, y, 130); Edit("eKey", 150, y, 210); Static("r3", "API secret", 380, y, 130); Edit("eSec", 515, y, 180, true); y += 22;
             Static("l4", "Integration ID", 15, y, 130); Edit("eIid", 150, y, 210); Static("r4", "Environment", 380, y, 130); Combo("cEnv", 515, y, 120); AddValid("cEnv", "Production", "Production"); AddValid("cEnv", "Sandbox", "Sandbox"); y += 22;
             Static("l5", "Connection timeout (s)", 15, y, 130); Edit("eTo", 150, y, 60); Static("r5", "SAP admin users (comma)", 380, y, 130); Edit("eAu", 515, y, 180); y += 22;
-            Static("l6", "ERPNext company (info)", 15, y, 130); Edit("eCo", 150, y, 210); Static("r6", "Document number pattern", 380, y, 130); Edit("eDn", 515, y, 180); y += 24;
+            Static("l6", "GST Portal company (info)", 15, y, 130); Edit("eCo", 150, y, 210); Static("r6", "Document number pattern", 380, y, 130); Edit("eDn", 515, y, 180); y += 24;
             Check("cAei", "Automatic E-Invoice generation (needs validated GST configuration)", 15, y, 330); Check("cAew", "Automatic E-Way Bill generation", 380, y, 300); y += 26;
             Button("bTest", "Test Connection", 15, y, 120); Button("bAuth", "Test Authentication", 140, y, 130); Button("bProf", "Check Integration Profile", 275, y, 160); Button("bSave", "Save Configuration", 440, y, 130); y += 24;
             Button("bAct", "Activate / Deactivate", 15, y, 150); Button("bDel", "Delete Configuration", 170, y, 140); Button("bSap", "Create SAP UDF/UDT", 315, y, 150); y += 28;
@@ -47,7 +47,7 @@ namespace EInvGstAddon.UI
             else
             {
                 Show(new AppConfig { Id = AppConfig.NewId(), SapDatabase = Svc.Sap.DatabaseName, Active = true, IntegrationId = "SAPB1_" + System.Text.RegularExpressions.Regex.Replace(Svc.Sap.DatabaseName, "[^A-Za-z0-9]", "_").ToUpperInvariant() }, true);
-                Log("eLog", "No configuration exists yet. The open SAP company database is '" + Svc.Sap.DatabaseName + "'. Enter the ERPNext URL, API key/secret and the Integration ID created on the ERPNext site, then Save.");
+                Log("eLog", "No configuration exists yet. The open SAP company database is '" + Svc.Sap.DatabaseName + "'. Enter the GST Portal URL, API key/secret and the Integration ID created on the GST Portal server, then Save.");
             }
         }
 
@@ -83,7 +83,7 @@ namespace EInvGstAddon.UI
                 return;
             }
             if (e.BeforeAction || e.EventType != SAPbouiCOM.BoEventTypes.et_ITEM_PRESSED) return;
-            if (!Authorization.IsAdmin(Svc)) { Log("eLog", "Only a SAP superuser or a configured administrator can change the ERPNext configuration."); return; }
+            if (!Authorization.IsAdmin(Svc)) { Log("eLog", "Only a SAP superuser or a configured administrator can change the GST Portal configuration."); return; }
             switch (e.ItemUID)
             {
                 case "bNew": Show(new AppConfig { Id = AppConfig.NewId(), SapDatabase = Svc.Sap.DatabaseName, Active = false }, true); Log("eLog", "New configuration. It is saved inactive if another configuration is already active for this SAP database."); break;
@@ -91,7 +91,7 @@ namespace EInvGstAddon.UI
                 case "bDel": Delete(); break;
                 case "bAct": Toggle(); break;
                 case "bSap": InstallSap(); break;
-                case "bTest": Run("Test Connection", c => "ERPNext reachable: " + (string)c.Method("ping")["message"]); break;
+                case "bTest": Run("Test Connection", c => "GST Portal reachable: " + (string)c.Method("ping")["message"]); break;
                 case "bAuth": Run("Test Authentication", c => "Authenticated as " + (string)c.Method("frappe.auth.get_logged_user")["message"]); break;
                 case "bProf": Run("Check Integration Profile", c => Describe(new GstGateway(c).Ping())); break;
             }
@@ -100,8 +100,8 @@ namespace EInvGstAddon.UI
         private static string Describe(Newtonsoft.Json.Linq.JObject p)
         {
             var prof = p["profile"];
-            string s = "API user " + p["user"] + " | app " + p["app"] + " " + p["api_version"] + " | Frappe " + p["frappe"] + ", ERPNext " + p["erpnext"] + ", India Compliance " + p["india_compliance"] + " | GST Settings " + ((bool?)p["gst_sandbox_mode"] == true ? "SANDBOX" : "PRODUCTION");
-            if (prof == null || prof.Type == Newtonsoft.Json.Linq.JTokenType.Null) return s + "\nPROFILE NOT FOUND on the ERPNext site (create a 'SAP Integration Profile' with this Integration ID).";
+            string s = "API user " + p["user"] + " | app " + p["app"] + " " + p["api_version"] + " | GST service " + p["india_compliance"] + " | GST mode " + ((bool?)p["gst_sandbox_mode"] == true ? "SANDBOX" : "PRODUCTION");
+            if (prof == null || prof.Type == Newtonsoft.Json.Linq.JTokenType.Null) return s + "\nPROFILE NOT FOUND on the GST Portal server (create an integration profile with this Integration ID).";
             return s + "\nProfile: enabled=" + prof["enabled"] + ", environment=" + prof["environment"] + ", SAP database=" + prof["sap_database"] + ", API user matches=" + prof["api_user_matches"] + ", environment consistent with GST Settings=" + prof["environment_consistent"];
         }
 
@@ -109,7 +109,7 @@ namespace EInvGstAddon.UI
         {
             AppConfig cfg;
             try { cfg = FromForm(); } catch (Exception ex) { Log("eLog", what + " not run: " + ex.Message); return; }
-            if (string.IsNullOrEmpty(cfg.ErpUrl)) { Log("eLog", "Enter the ERPNext URL first."); return; }
+            if (string.IsNullOrEmpty(cfg.ErpUrl)) { Log("eLog", "Enter the GST Portal URL first."); return; }
             Log("eLog", what + " ...");
             Svc.Background(what, () => { using (var c = new ErpClient(cfg)) return work(c); }, r => Log("eLog", what + ": " + r), ex => Log("eLog", what + " FAILED: " + ex.Message));
         }
@@ -120,7 +120,7 @@ namespace EInvGstAddon.UI
             try
             {
                 cfg = FromForm();
-                if (!cfg.ErpUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The ERPNext URL must start with https://");
+                if (!cfg.ErpUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The GST Portal URL must start with https://");
                 if (string.IsNullOrEmpty(cfg.ApiKey) || string.IsNullOrEmpty(cfg.ApiSecret)) throw new InvalidOperationException("API key and secret are required.");
                 if (string.IsNullOrWhiteSpace(cfg.Name)) cfg.Name = cfg.SapDatabase + " -> " + cfg.IntegrationId;
                 cfg.ValidateTarget();
@@ -128,16 +128,16 @@ namespace EInvGstAddon.UI
             }
             catch (Exception ex) { Log("eLog", "Cannot save: " + ex.Message); return; }
 
-            Log("eLog", "Checking the integration profile on the ERPNext site ...");
+            Log("eLog", "Checking the integration profile on the GST Portal server ...");
             Svc.Background("validate-profile", () => { using (var c = new ErpClient(cfg)) return new GstGateway(c).Ping(); }, p =>
             {
                 try
                 {
                     var prof = p["profile"];
                     string note = "";
-                    if (prof == null || prof.Type == Newtonsoft.Json.Linq.JTokenType.Null) note = " WARNING: no 'SAP Integration Profile' named " + cfg.IntegrationId + " was found on the site yet; GST actions will be refused until it exists.";
+                    if (prof == null || prof.Type == Newtonsoft.Json.Linq.JTokenType.Null) note = " WARNING: no integration profile named " + cfg.IntegrationId + " was found on the site yet; GST actions will be refused until it exists.";
                     else if ((bool?)prof["api_user_matches"] != true) note = " WARNING: the profile is bound to a different API user.";
-                    else if ((bool?)prof["environment_consistent"] != true) note = " WARNING: the profile environment does not match the ERPNext GST Settings sandbox mode.";
+                    else if ((bool?)prof["environment_consistent"] != true) note = " WARNING: the profile environment does not match the GST Portal Settings sandbox mode.";
                     ConfigStore.Upsert(cfg);
                     if (cfg.Id == Svc.Cfg.Id && Svc.HasConfig) JsonConvert.PopulateObject(JsonConvert.SerializeObject(cfg), Svc.Cfg);
                     Set("eSec", ""); _cur = cfg; _isNew = false;
@@ -145,13 +145,13 @@ namespace EInvGstAddon.UI
                     Log("eLog", "Configuration saved" + (cfg.Active ? "" : " (inactive)") + "." + note + (cfg.Id == Svc.Cfg.Id && Svc.HasConfig ? "" : " Restart the add-on (or reopen the company) to activate it."));
                 }
                 catch (Exception ex) { Log("eLog", "Save failed: " + ex.Message); }
-            }, ex => Log("eLog", "Not saved - the ERPNext GST API could not be reached or the credentials are wrong: " + ex.Message));
+            }, ex => Log("eLog", "Not saved - the GST Portal API could not be reached or the credentials are wrong: " + ex.Message));
         }
 
         private void Delete()
         {
             if (_isNew) { Log("eLog", "Nothing to delete."); return; }
-            if (Svc.App.MessageBox("Delete configuration '" + _cur.Name + "'?\nERPNext data and SAP records are NOT deleted; only this saved connection is removed.", 2, "Delete", "Cancel", "") != 1) return;
+            if (Svc.App.MessageBox("Delete configuration '" + _cur.Name + "'?\nGST Portal data and SAP records are NOT deleted; only this saved connection is removed.", 2, "Delete", "Cancel", "") != 1) return;
             ConfigStore.Delete(_cur.Id);
             Log("eLog", "Configuration deleted." + (_cur.Id == Svc.Cfg.Id ? " Restart the add-on." : ""));
             FillProfiles(null);

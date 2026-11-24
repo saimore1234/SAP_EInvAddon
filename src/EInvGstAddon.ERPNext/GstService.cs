@@ -42,7 +42,7 @@ namespace EInvGstAddon.ERPNext
             var m = (JObject)r["message"];
             Func<string, string> v = app => m[app] == null ? null : (string)m[app]["version"];
             var res = new Versions { Frappe = v("frappe"), Erpnext = v("erpnext"), IndiaCompliance = v("india_compliance") };
-            if (res.IndiaCompliance == null) { res.Note = "The India Compliance GST app is not installed on this ERPNext site; E-Invoice / E-Way Bill are unavailable (invoice synchronisation is not affected)."; return res; }
+            if (res.IndiaCompliance == null) { res.Note = "The India Compliance GST app is not installed on this GST Portal site; E-Invoice / E-Way Bill are unavailable (invoice synchronisation is not affected)."; return res; }
             bool major15 = res.Frappe != null && res.Frappe.StartsWith("15.") && res.IndiaCompliance.StartsWith("15.");
             res.Compatible = major15;
             res.Note = !major15
@@ -60,27 +60,27 @@ namespace EInvGstAddon.ERPNext
             if (ver.Note.Contains("different")) c.Warnings.Add(ver.Note);
 
             var gs = _erp.GetDoc("GST Settings", "GST Settings");
-            if (gs == null) { c.Errors.Add("GST Settings not found in ERPNext."); return c; }
-            if (!Truthy(gs["enable_api"])) c.Errors.Add("GST API is not enabled in ERPNext GST Settings (enable_api).");
+            if (gs == null) { c.Errors.Add("GST Settings not found in GST Portal."); return c; }
+            if (!Truthy(gs["enable_api"])) c.Errors.Add("GST API is not enabled in GST Portal GST Settings (enable_api).");
             var co = _erp.GetDoc("Company", _cfg.ErpCompany);
-            if (co == null) { c.Errors.Add("ERPNext company '" + _cfg.ErpCompany + "' not found."); return c; }
+            if (co == null) { c.Errors.Add("GST Portal company '" + _cfg.ErpCompany + "' not found."); return c; }
             string gstin = (string)co["gstin"];
-            if (string.IsNullOrWhiteSpace(gstin)) c.Errors.Add("The ERPNext company has no GSTIN. Set it on the company (via its GST address) before using E-Invoice / E-Way Bill.");
+            if (string.IsNullOrWhiteSpace(gstin)) c.Errors.Add("The GST Portal company has no GSTIN. Set it on the company (via its GST address) before using E-Invoice / E-Way Bill.");
             else if (!string.IsNullOrWhiteSpace(_cfg.SupplierGstin) && !string.Equals(gstin, _cfg.SupplierGstin.Trim(), StringComparison.OrdinalIgnoreCase))
-                c.Errors.Add("Supplier GSTIN in this configuration (" + _cfg.SupplierGstin + ") differs from the GSTIN of the ERPNext company (" + gstin + ").");
+                c.Errors.Add("Supplier GSTIN in this configuration (" + _cfg.SupplierGstin + ") differs from the GSTIN of the GST Portal company (" + gstin + ").");
 
             // credentials per company
             var creds = gs["credentials"] as JArray ?? new JArray();
             bool hasCred = creds.Any(x => string.Equals((string)x["company"], _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase) && ((string)x["service"] ?? "").IndexOf("Invoice", StringComparison.OrdinalIgnoreCase) >= 0);
-            if (!hasCred) c.Errors.Add("No GSP credentials for e-Waybill / e-Invoice are configured in ERPNext GST Settings for company '" + _cfg.ErpCompany + "'.");
+            if (!hasCred) c.Errors.Add("No GSP credentials for e-Waybill / e-Invoice are configured in GST Portal GST Settings for company '" + _cfg.ErpCompany + "'.");
 
             // sandbox/production consistency (GST Settings sandbox_mode is global on the site)
             bool siteSandbox = Truthy(gs["sandbox_mode"]);
             bool cfgSandbox = string.Equals(_cfg.Environment, "Sandbox", StringComparison.OrdinalIgnoreCase);
-            if (cfgSandbox && !siteSandbox) c.Errors.Add("This configuration is marked Sandbox but ERPNext GST Settings is in PRODUCTION mode: a generated IRN would be real. Blocked.");
-            if (!cfgSandbox && siteSandbox) c.Warnings.Add("This configuration is marked Production but ERPNext GST Settings is in sandbox mode: documents will not be real.");
-            if (!Truthy(gs["enable_e_invoice"])) c.Warnings.Add("e-Invoice is not enabled in ERPNext GST Settings.");
-            if (!Truthy(gs["enable_e_waybill"])) c.Warnings.Add("e-Waybill is not enabled in ERPNext GST Settings.");
+            if (cfgSandbox && !siteSandbox) c.Errors.Add("This configuration is marked Sandbox but GST Portal GST Settings is in PRODUCTION mode: a generated IRN would be real. Blocked.");
+            if (!cfgSandbox && siteSandbox) c.Warnings.Add("This configuration is marked Production but GST Portal GST Settings is in sandbox mode: documents will not be real.");
+            if (!Truthy(gs["enable_e_invoice"])) c.Warnings.Add("e-Invoice is not enabled in GST Portal GST Settings.");
+            if (!Truthy(gs["enable_e_waybill"])) c.Warnings.Add("e-Waybill is not enabled in GST Portal GST Settings.");
             return c;
         }
 
@@ -93,7 +93,7 @@ namespace EInvGstAddon.ERPNext
         public GstStatus GetStatus(string salesInvoice, bool includeDocuments = false)
         {
             var d = _erp.GetDoc("Sales Invoice", salesInvoice);
-            if (d == null) throw new ConfigurationException("Sales Invoice '" + salesInvoice + "' does not exist in ERPNext.");
+            if (d == null) throw new ConfigurationException("Sales Invoice '" + salesInvoice + "' does not exist in GST Portal.");
             string company = Str(d["company"]);
             if (!string.Equals(company, _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase))
                 throw new ConfigurationException("Safety stop: Sales Invoice '" + salesInvoice + "' belongs to company '" + company + "', not '" + _cfg.ErpCompany + "'.");
@@ -139,10 +139,10 @@ namespace EInvGstAddon.ERPNext
         {
             var c = new GstCheck();
             if (!_cfg.EInvoiceEnabled) c.Errors.Add("E-Invoice is not enabled in this configuration's GST screen.");
-            if (s.DocStatus == 0) c.Errors.Add("The ERPNext Sales Invoice is a Draft. Submit it in ERPNext first (use 'Submit in ERPNext' after checking it).");
-            if (s.DocStatus == 2) c.Errors.Add("The ERPNext Sales Invoice is cancelled.");
+            if (s.DocStatus == 0) c.Errors.Add("The GST Portal Sales Invoice is a Draft. Submit it in GST Portal first (use 'Submit in GST Portal' after checking it).");
+            if (s.DocStatus == 2) c.Errors.Add("The GST Portal Sales Invoice is cancelled.");
             if (s.HasIrn) c.Errors.Add("An IRN already exists for this invoice.");
-            if (string.IsNullOrWhiteSpace(s.CompanyGstin)) c.Errors.Add("The invoice has no company GSTIN (supplier GSTIN missing in ERPNext).");
+            if (string.IsNullOrWhiteSpace(s.CompanyGstin)) c.Errors.Add("The invoice has no company GSTIN (supplier GSTIN missing in GST Portal).");
             if (string.IsNullOrWhiteSpace(s.BillingGstin) && s.PlaceOfSupply != "96-Other Countries") c.Errors.Add("Customer billing GSTIN missing: e-Invoice is not applicable to B2C invoices.");
             if (!string.IsNullOrWhiteSpace(s.CompanyGstin) && s.CompanyGstin == s.BillingGstin) c.Errors.Add("Company and billing GSTIN are the same.");
             return c;
@@ -152,7 +152,7 @@ namespace EInvGstAddon.ERPNext
         {
             var c = new GstCheck();
             if (!_cfg.EWayBillEnabled) c.Errors.Add("E-Way Bill is not enabled in this configuration's GST screen.");
-            if (s.DocStatus != 1) c.Errors.Add("The ERPNext Sales Invoice must be Submitted before an E-Way Bill can be generated.");
+            if (s.DocStatus != 1) c.Errors.Add("The GST Portal Sales Invoice must be Submitted before an E-Way Bill can be generated.");
             if (forGeneration && s.HasEwb) c.Errors.Add("An E-Way Bill already exists (" + s.EwbNo + ").");
             if (t != null)
             {
@@ -167,7 +167,7 @@ namespace EInvGstAddon.ERPNext
                     c.Errors.Add("Transporter ID must be a valid 15-character GSTIN.");
                 if (!string.IsNullOrWhiteSpace(t.LrNo) && string.IsNullOrWhiteSpace(t.LrDate) && t.ModeOfTransport != "Road") c.Errors.Add("Transport document date is required with the document number.");
             }
-            if (forGeneration && s.GrandTotal < 50000m) c.Warnings.Add("Invoice value is below the usual e-Waybill threshold; ERPNext applies the threshold in GST Settings.");
+            if (forGeneration && s.GrandTotal < 50000m) c.Warnings.Add("Invoice value is below the usual e-Waybill threshold; GST Portal applies the threshold in GST Settings.");
             return c;
         }
 
@@ -178,7 +178,7 @@ namespace EInvGstAddon.ERPNext
             if (!CancelReasons.Contains(reason ?? "")) c.Errors.Add("Select a cancellation reason.");
             if (s.AckDate.HasValue && s.AckDate.Value.AddDays(1) < DateTime.Now) c.Errors.Add("An e-Invoice can be cancelled only within 24 hours of generation.");
             if (!s.AckDate.HasValue && s.HasIrn) c.Errors.Add("The acknowledgement time is unknown; refresh the status first.");
-            c.Warnings.Add("ERPNext also cancels the Sales Invoice (and its active E-Way Bill) when the IRN is cancelled. The SAP invoice is never changed.");
+            c.Warnings.Add("GST Portal also cancels the Sales Invoice (and its active E-Way Bill) when the IRN is cancelled. The SAP invoice is never changed.");
             return c;
         }
 
@@ -199,9 +199,9 @@ namespace EInvGstAddon.ERPNext
             if (s.DocStatus == 1) return new GstResult { Success = true, Message = "Already submitted.", Status = s };
             if (s.DocStatus == 2) return new GstResult { Success = false, Message = "The invoice is cancelled.", Status = s };
             try { _erp.Update("Sales Invoice", salesInvoice, new JObject { ["docstatus"] = 1 }); }
-            catch (ErpApiException ex) { return new GstResult { Success = false, Message = "ERPNext refused the submission: " + ex.Message, Status = s }; }
+            catch (ErpApiException ex) { return new GstResult { Success = false, Message = "GST Portal refused the submission: " + ex.Message, Status = s }; }
             var after = GetStatus(salesInvoice);
-            return new GstResult { Success = after.DocStatus == 1, Message = after.DocStatus == 1 ? "Submitted in ERPNext." : "Submission not confirmed by ERPNext.", Status = after };
+            return new GstResult { Success = after.DocStatus == 1, Message = after.DocStatus == 1 ? "Submitted in GST Portal." : "Submission not confirmed by GST Portal.", Status = after };
         }
 
         public GstResult GenerateEInvoice(string salesInvoice)
@@ -212,7 +212,7 @@ namespace EInvGstAddon.ERPNext
             var cfgChk = ValidateGstConfiguration();
             if (!cfgChk.Ok) return new GstResult { Success = false, Message = cfgChk.ToString(), Status = before };
             return Call(EInvoiceModule + "generate_e_invoice", new JObject { ["docname"] = salesInvoice, ["throw"] = true, ["force"] = false }, salesInvoice,
-                s => s.HasIrn, "e-Invoice generated by the IRP (IRN received).", "ERPNext did not return an IRN.");
+                s => s.HasIrn, "e-Invoice generated by the IRP (IRN received).", "GST Portal did not return an IRN.");
         }
 
         public GstResult CancelEInvoice(string salesInvoice, string reason, string remark)
@@ -222,7 +222,7 @@ namespace EInvGstAddon.ERPNext
             if (!chk.Ok) return new GstResult { Success = false, Message = chk.ToString(), Status = before };
             return Call(EInvoiceModule + "cancel_e_invoice",
                 new JObject { ["docname"] = salesInvoice, ["values"] = new JObject { ["reason"] = reason, ["remark"] = string.IsNullOrWhiteSpace(remark) ? reason : remark } }, salesInvoice,
-                s => !s.HasIrn, "e-Invoice cancelled (confirmed by ERPNext).", "ERPNext still shows an active IRN.");
+                s => !s.HasIrn, "e-Invoice cancelled (confirmed by GST Portal).", "GST Portal still shows an active IRN.");
         }
 
         public GstResult GenerateEWayBill(string salesInvoice, EWayBillInput t)
@@ -234,7 +234,7 @@ namespace EInvGstAddon.ERPNext
             if (!cfgChk.Ok) return new GstResult { Success = false, Message = cfgChk.ToString(), Status = before };
             return Call(EWaybillModule + "generate_e_waybill",
                 new JObject { ["doctype"] = "Sales Invoice", ["docname"] = salesInvoice, ["values"] = TransportValues(t), ["force"] = false }, salesInvoice,
-                s => s.HasEwb, "E-Way Bill generated (number received).", "ERPNext did not return an E-Way Bill number.");
+                s => s.HasEwb, "E-Way Bill generated (number received).", "GST Portal did not return an E-Way Bill number.");
         }
 
         public GstResult CancelEWayBill(string salesInvoice, string reason, string remark)
@@ -244,7 +244,7 @@ namespace EInvGstAddon.ERPNext
             if (!chk.Ok) return new GstResult { Success = false, Message = chk.ToString(), Status = before };
             return Call(EWaybillModule + "cancel_e_waybill",
                 new JObject { ["doctype"] = "Sales Invoice", ["docname"] = salesInvoice, ["values"] = new JObject { ["reason"] = reason, ["remark"] = string.IsNullOrWhiteSpace(remark) ? reason : remark } }, salesInvoice,
-                s => !s.HasEwb, "E-Way Bill cancelled (confirmed by ERPNext).", "ERPNext still shows an active E-Way Bill.");
+                s => !s.HasEwb, "E-Way Bill cancelled (confirmed by GST Portal).", "GST Portal still shows an active E-Way Bill.");
         }
 
         public GstResult UpdateVehicle(string salesInvoice, EWayBillInput t, string reason, string remark, string placeOfChange, string stateName)
@@ -258,7 +258,7 @@ namespace EInvGstAddon.ERPNext
             v["reason"] = reason; v["remark"] = remark ?? reason; v["place_of_change"] = placeOfChange; v["state"] = stateName; v["update_e_waybill_data"] = true;
             string vehicleBefore = before.VehicleNo;
             return Call(EWaybillModule + "update_vehicle_info", new JObject { ["doctype"] = "Sales Invoice", ["docname"] = salesInvoice, ["values"] = v }, salesInvoice,
-                s => s.VehicleNo.Replace(" ", "") == t.VehicleNo.Replace(" ", ""), "Vehicle updated on the E-Way Bill.", "ERPNext did not confirm the vehicle change.");
+                s => s.VehicleNo.Replace(" ", "") == t.VehicleNo.Replace(" ", ""), "Vehicle updated on the E-Way Bill.", "GST Portal did not confirm the vehicle change.");
         }
 
         public GstResult UpdateTransporter(string salesInvoice, string transporterGstin)
@@ -270,7 +270,7 @@ namespace EInvGstAddon.ERPNext
             if (!chk.Ok) return new GstResult { Success = false, Message = chk.ToString(), Status = before };
             return Call(EWaybillModule + "update_transporter",
                 new JObject { ["doctype"] = "Sales Invoice", ["docname"] = salesInvoice, ["values"] = new JObject { ["gst_transporter_id"] = transporterGstin, ["update_e_waybill_data"] = true } }, salesInvoice,
-                s => string.Equals(s.TransporterId, transporterGstin, StringComparison.OrdinalIgnoreCase), "Transporter updated on the E-Way Bill.", "ERPNext did not confirm the transporter change.");
+                s => string.Equals(s.TransporterId, transporterGstin, StringComparison.OrdinalIgnoreCase), "Transporter updated on the E-Way Bill.", "GST Portal did not confirm the transporter change.");
         }
 
         public GstResult RefreshEWayBill(string salesInvoice)
@@ -303,7 +303,7 @@ namespace EInvGstAddon.ERPNext
             try { _erp.CallPost(method, args); }
             catch (ErpUnavailableException ex) { callError = ex.Message; unavailable = true; }
             catch (ErpApiException ex) { callError = ex.Message; }
-            catch (ErpAuthException ex) { callError = "ERPNext rejected the credentials/permissions: " + ex.Message; }
+            catch (ErpAuthException ex) { callError = "GST Portal rejected the credentials/permissions: " + ex.Message; }
 
             GstStatus after = null;
             try { after = GetStatus(salesInvoice, true); } catch (ErpUnavailableException ex) { if (callError == null) callError = ex.Message; unavailable = true; }
@@ -329,21 +329,21 @@ namespace EInvGstAddon.ERPNext
             var r = new List<CheckItem>();
             string user;
             try { user = (string)_erp.Method("frappe.auth.get_logged_user")["message"]; }
-            catch (Exception ex) { r.Add(new CheckItem { Name = "ERPNext connection", Ok = false, Message = ex.Message }); return r; }
-            Add(r, "ERPNext connection", true, "Connected as " + user, "");
+            catch (Exception ex) { r.Add(new CheckItem { Name = "GST Portal connection", Ok = false, Message = ex.Message }); return r; }
+            Add(r, "GST Portal connection", true, "Connected as " + user, "");
 
             JObject co = null, si = null;
             try { co = _erp.GetDoc("Company", _cfg.ErpCompany); } catch (Exception ex) { r.Add(new CheckItem { Name = "Active configuration / company", Ok = false, Message = ex.Message }); }
             Add(r, "Active configuration / company", co != null && string.Equals((string)co["abbr"], _cfg.ErpAbbr, StringComparison.Ordinal),
-                "Configuration " + _cfg.Name + " -> company " + _cfg.ErpCompany, "Company " + _cfg.ErpCompany + " not found on the ERPNext site or its abbreviation differs.");
-            try { si = _erp.GetDoc("Sales Invoice", salesInvoice); } catch (Exception ex) { r.Add(new CheckItem { Name = "ERPNext invoice mapping", Ok = false, Message = ex.Message }); return r; }
+                "Configuration " + _cfg.Name + " -> company " + _cfg.ErpCompany, "Company " + _cfg.ErpCompany + " not found on the GST Portal site or its abbreviation differs.");
+            try { si = _erp.GetDoc("Sales Invoice", salesInvoice); } catch (Exception ex) { r.Add(new CheckItem { Name = "GST Portal invoice mapping", Ok = false, Message = ex.Message }); return r; }
             bool mapped = si != null && string.Equals(Str(si["company"]), _cfg.ErpCompany, StringComparison.OrdinalIgnoreCase);
-            Add(r, "ERPNext invoice mapping", mapped, "Linked to " + salesInvoice + " (" + _cfg.ErpCompany + ")",
+            Add(r, "GST Portal invoice mapping", mapped, "Linked to " + salesInvoice + " (" + _cfg.ErpCompany + ")",
                 si == null ? "Sales Invoice " + salesInvoice + " does not exist." : "Invoice belongs to company " + Str(si["company"]) + ", not the configured company.");
             if (!mapped) return r;
 
             int ds = si["docstatus"] == null ? 0 : (int)si["docstatus"];
-            Add(r, "Invoice submission status", ds == 1, "Submitted", ds == 0 ? "Draft - submit the invoice in ERPNext first." : "Cancelled.");
+            Add(r, "Invoice submission status", ds == 1, "Submitted", ds == 0 ? "Draft - submit the invoice in GST Portal first." : "Cancelled.");
             string cg = Str(si["company_gstin"]), bg = Str(si["billing_address_gstin"]), pos = Str(si["place_of_supply"]);
             Add(r, "Supplier GSTIN", !string.IsNullOrWhiteSpace(cg) && System.Text.RegularExpressions.Regex.IsMatch(cg, GstinRx), cg, "Missing or invalid on the invoice (company GSTIN).");
             if (!string.IsNullOrWhiteSpace(_cfg.SupplierGstin) && !string.IsNullOrWhiteSpace(cg))
@@ -353,7 +353,7 @@ namespace EInvGstAddon.ERPNext
             Add(r, "Recipient GSTIN", overseas || (!string.IsNullOrWhiteSpace(bg) && System.Text.RegularExpressions.Regex.IsMatch(bg, GstinRx)),
                 overseas ? "Export (no GSTIN needed)" : bg, "Missing or invalid billing GSTIN: e-Invoice is not applicable to B2C invoices.");
             Add(r, "Document number", System.Text.RegularExpressions.Regex.IsMatch(salesInvoice, @"^[A-Za-z0-9][A-Za-z0-9/-]{0,15}$"), salesInvoice,
-                salesInvoice + " is not accepted by the IRP (max 16 characters: letters, digits, slash, hyphen). Change the ERPNext naming series.");
+                salesInvoice + " is not accepted by the IRP (max 16 characters: letters, digits, slash, hyphen). Change the GST Portal naming series.");
             DateTime pd; bool hasDate = DateTime.TryParse(Str(si["posting_date"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out pd);
             Add(r, "Document date", hasDate && pd.Date <= DateTime.Today, hasDate ? pd.ToString("yyyy-MM-dd") : "", "Missing or in the future.");
 
@@ -394,8 +394,8 @@ namespace EInvGstAddon.ERPNext
         public List<CheckItem> ValidateEWayBillReport(string salesInvoice, EWayBillInput input)
         {
             var r = new List<CheckItem>();
-            try { _erp.Method("frappe.auth.get_logged_user"); Add(r, "ERPNext connection", true, "Connected", ""); }
-            catch (Exception ex) { r.Add(new CheckItem { Name = "ERPNext connection", Ok = false, Message = ex.Message }); return r; }
+            try { _erp.Method("frappe.auth.get_logged_user"); Add(r, "GST Portal connection", true, "Connected", ""); }
+            catch (Exception ex) { r.Add(new CheckItem { Name = "GST Portal connection", Ok = false, Message = ex.Message }); return r; }
             var s = GetStatus(salesInvoice);
             Add(r, "Invoice submission status", s.DocStatus == 1, "Submitted", "The Sales Invoice must be submitted first.");
             Add(r, "Existing E-Way Bill", !s.HasEwb, "None yet", "E-Way Bill " + s.EwbNo + " already exists.");

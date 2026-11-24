@@ -128,7 +128,7 @@ namespace EInvGstAddon.UI
         // ---------------------------------------------------------------- QR (the real signed payload) with print
         public static void Qr(GstStatus s)
         {
-            if (string.IsNullOrEmpty(s.SignedQr)) { Message("Signed QR Code", "ERPNext holds no signed QR code for this invoice."); return; }
+            if (string.IsNullOrEmpty(s.SignedQr)) { Message("Signed QR Code", "GST Portal holds no signed QR code for this invoice."); return; }
             using (var f = NewForm("Signed QR Code - " + s.SalesInvoice, 470, 650))
             {
                 var data = new QRCoder.QRCodeGenerator().CreateQrCode(s.SignedQr, QRCoder.QRCodeGenerator.ECCLevel.M);
@@ -157,7 +157,7 @@ namespace EInvGstAddon.UI
         // ---------------------------------------------------------------- files
         public static void SaveText(string suggestedName, string text)
         {
-            if (string.IsNullOrEmpty(text)) { Message("Download", "ERPNext holds no such document for this invoice."); return; }
+            if (string.IsNullOrEmpty(text)) { Message("Download", "GST Portal holds no such document for this invoice."); return; }
             using (var dlg = new SaveFileDialog { FileName = suggestedName, Filter = "Text/JSON|*.txt;*.json|All files|*.*" })
             { if (dlg.ShowDialog() != DialogResult.OK) return; File.WriteAllText(dlg.FileName, text, new UTF8Encoding(false)); Message("Download", "Saved " + dlg.FileName); }
         }

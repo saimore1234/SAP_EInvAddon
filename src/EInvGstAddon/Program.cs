@@ -46,7 +46,7 @@ namespace EInvGstAddon
                 catch (Exception ex)
                 {
                     Logger.Error("startup.failed", ex);
-                    MessageBox.Show("The E-Invoice & ERPNext add-on could not start:\n" + ex.Message, Constants.AddonName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("The E-Invoice & GST Portal add-on could not start:\n" + ex.Message, Constants.AddonName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return 3;
                 }
             }

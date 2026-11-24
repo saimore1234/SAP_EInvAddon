@@ -45,7 +45,7 @@ namespace EInvGstAddon.UI
         public const string Type = "EINV_DASHBOARD";
         private static readonly string[] Kpis =
         {
-            "Total SAP Invoices", "E-Invoices Generated", "E-Invoices Pending", "E-Invoices Unknown (reconcile)", "E-Way Bills Generated", "E-Way Bills Pending", "Cancelled Documents", "GST operations in range", "ERPNext GST API"
+            "Total SAP Invoices", "E-Invoices Generated", "E-Invoices Pending", "E-Invoices Unknown (reconcile)", "E-Way Bills Generated", "E-Way Bills Pending", "Cancelled Documents", "GST operations in range", "GST Portal GST API"
         };
 
         public DashboardForm(AddonServices svc) : base(svc)

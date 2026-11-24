@@ -57,7 +57,7 @@ namespace EInvGstAddon.UI
         {
             new[] { "EINV_M_DASH", "Dashboard" }, new[] { "EINV_M_EINV", "Generate E-Invoice" }, new[] { "EINV_M_EWB", "Generate E-Way Bill" },
             new[] { "EINV_M_REGI", "E-Invoice Register" }, new[] { "EINV_M_REGW", "E-Way Bill Register" }, new[] { "EINV_M_HIST", "Integration History" },
-            new[] { "EINV_M_LOGS", "Error Logs" }, new[] { "EINV_M_GST", "GST Configuration" }, new[] { "EINV_M_TAX", "GST Tax Mapping" }, new[] { "EINV_M_SET", "ERPNext Connection Settings" }
+            new[] { "EINV_M_LOGS", "Error Logs" }, new[] { "EINV_M_GST", "GST Configuration" }, new[] { "EINV_M_TAX", "GST Tax Mapping" }, new[] { "EINV_M_SET", "GST Portal Connection Settings" }
         };
         private readonly SAPbouiCOM.Application _app;
         public MenuManager(SAPbouiCOM.Application app) { _app = app; }
@@ -67,7 +67,7 @@ namespace EInvGstAddon.UI
             Remove();
             var modules = _app.Menus.Item("43520");
             var root = (SAPbouiCOM.MenuCreationParams)_app.CreateObject(SAPbouiCOM.BoCreatableObjectType.cot_MenuCreationParams);
-            root.Type = SAPbouiCOM.BoMenuType.mt_POPUP; root.UniqueID = Root; root.String = "E-Invoice & ERPNext Integration"; root.Enabled = true; root.Position = modules.SubMenus.Count;
+            root.Type = SAPbouiCOM.BoMenuType.mt_POPUP; root.UniqueID = Root; root.String = "E-Invoice & GST Portal Integration"; root.Enabled = true; root.Position = modules.SubMenus.Count;
             modules.SubMenus.AddEx(root);
             var subs = _app.Menus.Item(Root).SubMenus;
             for (int i = 0; i < Items.Length; i++)
@@ -115,7 +115,7 @@ namespace EInvGstAddon.UI
             try
             {
                 _s.SchemaReady = new SchemaInstaller(_s.Di).IsInstalled();
-                if (!_s.SchemaReady) _s.Status("E-Invoice & ERPNext: SAP objects are missing or out of date. Open ERPNext Connection Settings and click 'Create SAP UDF/UDT'.", true);
+                if (!_s.SchemaReady) _s.Status("E-Invoice & GST Portal: SAP objects are missing or out of date. Open GST Portal Connection Settings and click 'Create SAP UDF/UDT'.", true);
             }
             catch (Exception ex) { Logger.Error("schema.check.failed", ex); }
 
@@ -128,8 +128,8 @@ namespace EInvGstAddon.UI
             _s.App.ItemEvent += OnItemEvent;
             _s.App.RightClickEvent += OnRightClick;
 
-            if (!_s.HasConfig) _s.Status("E-Invoice & ERPNext: no configuration for company database '" + _s.Di.DatabaseName + "'. Open ERPNext Connection Settings to create one.", true);
-            else _s.Status("E-Invoice & ERPNext GST add-on started (" + _s.Sap.DatabaseName + " -> " + _s.Cfg.IntegrationId + ", " + _s.Cfg.Environment + ").", false);
+            if (!_s.HasConfig) _s.Status("E-Invoice & GST Portal: no configuration for company database '" + _s.Di.DatabaseName + "'. Open GST Portal Connection Settings to create one.", true);
+            else _s.Status("E-Invoice & GST Portal GST add-on started (" + _s.Sap.DatabaseName + " -> " + _s.Cfg.IntegrationId + ", " + _s.Cfg.Environment + ").", false);
             Application.Run();
         }
 
@@ -160,8 +160,8 @@ namespace EInvGstAddon.UI
             try
             {
                 if (uid == "EINV_M_SET") { _s.Router.Open(SettingsForm.Type, () => new SettingsForm(_s)); return; }
-                if (!_s.HasConfig) { _s.Alert("There is no active ERPNext configuration for the open SAP company (" + _s.Di.DatabaseName + ").\nOpen ERPNext Connection Settings first."); return; }
-                if (!_s.SchemaReady) { _s.Alert("The SAP objects are missing or out of date.\nOpen ERPNext Connection Settings > Create SAP UDF/UDT, then log out and in again."); return; }
+                if (!_s.HasConfig) { _s.Alert("There is no active GST Portal configuration for the open SAP company (" + _s.Di.DatabaseName + ").\nOpen GST Portal Connection Settings first."); return; }
+                if (!_s.SchemaReady) { _s.Alert("The SAP objects are missing or out of date.\nOpen GST Portal Connection Settings > Create SAP UDF/UDT, then log out and in again."); return; }
                 switch (uid)
                 {
                     case "EINV_M_DASH": _s.Router.Open(DashboardForm.Type, () => new DashboardForm(_s)); break;

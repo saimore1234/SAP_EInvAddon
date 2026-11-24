@@ -124,7 +124,7 @@ namespace EInvGstAddon.UI
         private void Build(string formUid)
         {
             string why;
-            if (!_s.SchemaReady) { _builder.Hide(); _ctx = null; _s.Status("E-Invoice & ERPNext: SAP objects are out of date. Open ERPNext Connection Settings > Create SAP UDF/UDT, then log out and in again.", true); return; }
+            if (!_s.SchemaReady) { _builder.Hide(); _ctx = null; _s.Status("E-Invoice & GST Portal: SAP objects are out of date. Open GST Portal Connection Settings > Create SAP UDF/UDT, then log out and in again.", true); return; }
             var ctx = InvoiceContextResolver.Resolve(Snapshot(formUid), _s.Cfg.SapDatabase, Configured, out why);
             if (ctx == null) { Logger.Info("ctx.menu.hidden", "reason", why); _builder.Hide(); _ctx = null; return; }
             _ctx = ctx;
@@ -248,7 +248,7 @@ namespace EInvGstAddon.UI
             op.Contract = br.Json;
             if (!br.Ok)
             {
-                Dialogs.Checks("GST invoice data from SAP", br.Errors.Select(e => new CheckLine { Name = "SAP data", Ok = false, Message = e }).ToList(), "Nothing was sent to ERPNext.");
+                Dialogs.Checks("GST invoice data from SAP", br.Errors.Select(e => new CheckLine { Name = "SAP data", Ok = false, Message = e }).ToList(), "Nothing was sent to GST Portal.");
                 op.Finish(); return false;
             }
             return true;
@@ -335,7 +335,7 @@ namespace EInvGstAddon.UI
         {
             BuildResult br;
             if (!Build(op, null, out br)) return;
-            Bg(op, "Validating with the ERPNext GST API", g => g.Validate(op.Ctx.DocEntry, op.Contract), r =>
+            Bg(op, "Validating with the GST Portal API", g => g.Validate(op.Ctx.DocEntry, op.Contract), r =>
             {
                 Record("Validate", op.Ctx.DocEntry, r);
                 Dialogs.Checks("Validate GST invoice - SAP " + op.Ctx.DocNum, Lines(r), "Nothing was sent to the IRP.");
@@ -389,13 +389,13 @@ namespace EInvGstAddon.UI
             }
             BuildResult br;
             if (!Build(op, null, out br)) return;
-            Bg(op, "Validating with the ERPNext GST API", g => g.Validate(op.Ctx.DocEntry, op.Contract), v =>
+            Bg(op, "Validating with the GST Portal API", g => g.Validate(op.Ctx.DocEntry, op.Contract), v =>
             {
                 if (!v.Ok) { Record("Validate", op.Ctx.DocEntry, v); Dialogs.Checks("Generate E-Invoice - cannot continue", Lines(v), "Fix the failed checks, then try again."); op.Finish(); return; }
                 string env = _s.Cfg.Environment;
                 var subsArr = v.Data["sandbox_substitutions"] as JArray;
                 string subs = subsArr != null && subsArr.Count > 0 ? "\n\nSANDBOX: test identities will replace the seller/buyer GSTIN for the sandbox IRP." : "";
-                if (!Dialogs.Confirm("Generate E-Invoice", "Generate the e-Invoice (IRN) for SAP invoice " + op.Ctx.DocNum + " (" + op.Contract["document_number"] + ")?\n\nERPNext will call the " + env.ToUpperInvariant() + " IRP." + (env == "Production" ? "\nThis creates a REAL IRN on the government portal." : "") + subs)) { op.Finish(); return; }
+                if (!Dialogs.Confirm("Generate E-Invoice", "Generate the e-Invoice (IRN) for SAP invoice " + op.Ctx.DocNum + " (" + op.Contract["document_number"] + ")?\n\nGST Portal will call the " + env.ToUpperInvariant() + " IRP." + (env == "Production" ? "\nThis creates a REAL IRN on the government portal." : "") + subs)) { op.Finish(); return; }
                 Bg(op, "Generating e-Invoice", g => g.GenerateEInvoice(op.Ctx.DocEntry, op.Contract), r =>
                 {
                     Record("Generate e-Invoice", op.Ctx.DocEntry, r);
@@ -405,7 +405,7 @@ namespace EInvGstAddon.UI
                         var st = new GstStatus { SalesInvoice = "SAP " + op.Ctx.DocNum, DocStatus = 1, Irn = r.S("irn"), AckNo = r.S("ack_no"), AckDate = GstGateway.ParseDt(r.S("ack_date")), SignedQr = r.S("signed_qr"), SignedInvoice = r.S("signed_invoice"), EInvoiceStatus = "Generated", EwbStatus = "Not generated" };
                         _cache.MarkUncertain(op.Ctx.DocEntry, false);
                         Persist(op, st);
-                        Dialogs.Info("E-Invoice generated", "IRN: " + st.Irn + "\nAck No: " + st.AckNo + "\nAck Date: " + F(st.AckDate) + "\n\nThe IRN was returned by the IRP through ERPNext and is stored in SAP.");
+                        Dialogs.Info("E-Invoice generated", "IRN: " + st.Irn + "\nAck No: " + st.AckNo + "\nAck Date: " + F(st.AckDate) + "\n\nThe IRN was returned by the IRP through GST Portal and is stored in SAP.");
                     }
                     else
                     {
@@ -466,7 +466,7 @@ namespace EInvGstAddon.UI
             {
                 if (!s.HasIrn) { Dialogs.Message("Cancel E-Invoice", "There is no active IRN to cancel.", true); op.Finish(); return; }
                 if (s.AckDate.HasValue && s.AckDate.Value.AddDays(1) < DateTime.Now) { Dialogs.Message("Cancel E-Invoice", "An e-Invoice can be cancelled only within 24 hours of generation.", true); op.Finish(); return; }
-                var vals = Dialogs.Input("Cancel E-Invoice - SAP " + op.Ctx.DocNum, "IRN " + s.Irn + "\nOnly the e-Invoice is cancelled at the IRP. The SAP invoice is not changed or deleted, and nothing happens in ERPNext accounting (there is no ERPNext invoice).",
+                var vals = Dialogs.Input("Cancel E-Invoice - SAP " + op.Ctx.DocNum, "IRN " + s.Irn + "\nOnly the e-Invoice is cancelled at the IRP. The SAP invoice is not changed or deleted, and nothing happens in GST Portal accounting (there is no GST Portal invoice).",
                     new[] { new Dialogs.Field { Key = "reason", Label = "Cancellation reason", Options = Reasons, Default = Reasons[2] }, new Dialogs.Field { Key = "remark", Label = "Remarks" } }, "Cancel E-Invoice", null);
                 if (vals == null) { op.Finish(); return; }
                 if (!Dialogs.Confirm("Cancel E-Invoice", "Cancel the e-Invoice of SAP invoice " + op.Ctx.DocNum + " on the " + _s.Cfg.Environment.ToUpperInvariant() + " IRP?\nReason: " + vals["reason"])) { op.Finish(); return; }
@@ -534,11 +534,11 @@ namespace EInvGstAddon.UI
             Func<GstGateway, GstApiResult> validateCall = g => !validateOnly && WasValidated(op.Ctx.DocEntry, op.Contract)
                 ? new GstApiResult { Ok = true, Status = "Valid", Message = "Validated moments ago (unchanged data)." }
                 : g.Validate(op.Ctx.DocEntry, op.Contract);
-            Bg(op, "Validating with the ERPNext GST API", validateCall, v =>
+            Bg(op, "Validating with the GST Portal API", validateCall, v =>
             {
                 if (v.Ok) MarkValidated(op.Ctx.DocEntry, op.Contract);
                 if (!v.Ok || validateOnly) { Dialogs.Checks((validateOnly ? "Validate" : "Generate") + " E-Way Bill - SAP " + op.Ctx.DocNum, Lines(v), validateOnly ? "Nothing was generated." : "Fix the failed checks and try again."); op.Finish(); return; }
-                if (!Dialogs.Confirm("Generate E-Way Bill", "Generate the E-Way Bill for SAP invoice " + op.Ctx.DocNum + "?\nVehicle " + input.VehicleNo + ", " + input.Mode + ", " + input.Distance + " km.\nERPNext will call the " + _s.Cfg.Environment.ToUpperInvariant() + " e-Way Bill system." + (_s.Cfg.Environment == "Production" ? "\nThis creates a REAL E-Way Bill." : ""))) { op.Finish(); return; }
+                if (!Dialogs.Confirm("Generate E-Way Bill", "Generate the E-Way Bill for SAP invoice " + op.Ctx.DocNum + "?\nVehicle " + input.VehicleNo + ", " + input.Mode + ", " + input.Distance + " km.\nGST Portal will call the " + _s.Cfg.Environment.ToUpperInvariant() + " e-Way Bill system." + (_s.Cfg.Environment == "Production" ? "\nThis creates a REAL E-Way Bill." : ""))) { op.Finish(); return; }
                 Bg(op, "Generating e-Way Bill", g => g.GenerateEWayBill(op.Ctx.DocEntry, op.Contract), r =>
                 {
                     Record("Generate e-Way Bill", op.Ctx.DocEntry, r);
@@ -551,7 +551,7 @@ namespace EInvGstAddon.UI
                             Irn = old == null ? "" : old.Irn, AckNo = old == null ? "" : old.AckNo, AckDate = old == null ? null : old.AckDate, SignedQr = old == null ? "" : old.SignedQr, SignedInvoice = old == null ? "" : old.SignedInvoice, EInvoiceStatus = old == null ? "Not generated" : old.EInvoiceStatus };
                         _cache.MarkUncertain(op.Ctx.DocEntry, false);
                         Persist(op, st);
-                        Dialogs.Info("E-Way Bill generated", "E-Way Bill No: " + st.EwbNo + "\nDate: " + F(st.EwbDate) + "\nValid until: " + F(st.EwbValidUpto) + "\n\nReturned by the e-Way Bill system through ERPNext and stored in SAP.");
+                        Dialogs.Info("E-Way Bill generated", "E-Way Bill No: " + st.EwbNo + "\nDate: " + F(st.EwbDate) + "\nValid until: " + F(st.EwbValidUpto) + "\n\nReturned by the e-Way Bill system through GST Portal and stored in SAP.");
                     }
                     else Dialogs.Message("Generate E-Way Bill", (r.IsUnknown ? "UNKNOWN: " : "NOT generated: ") + r.Describe(), true);
                     op.Finish();
@@ -595,7 +595,7 @@ namespace EInvGstAddon.UI
             Status(op, "Reading e-Way Bill", s =>
             {
                 if (!s.HasEwb) { Dialogs.Message("Update Vehicle", "There is no active E-Way Bill for this invoice.", true); op.Finish(); return; }
-                var vals = Dialogs.Input("Update Vehicle - " + s.EwbNo, "The update is sent to the e-Way Bill system through ERPNext.",
+                var vals = Dialogs.Input("Update Vehicle - " + s.EwbNo, "The update is sent to the e-Way Bill system through GST Portal.",
                     new[]
                     {
                         new Dialogs.Field { Key = "ewb", Label = "E-Way Bill Number", Default = s.EwbNo, ReadOnly = true }, new Dialogs.Field { Key = "old", Label = "Existing Vehicle Number", Default = s.VehicleNo, ReadOnly = true },

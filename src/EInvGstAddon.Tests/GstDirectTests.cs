@@ -323,6 +323,21 @@ namespace EInvGstAddon.Tests
         }
 
         [Fact]
+        public void User_facing_screens_never_show_the_ERPNext_or_Frappe_brand()
+        {
+            string root = Root(); Assert.NotNull(root);
+            var files = Directory.GetFiles(Path.Combine(root, "src", "EInvGstAddon.UI"), "*.cs").Concat(new[] { Path.Combine(root, "src", "EInvGstAddon.Core", "ContextMenuModel.cs"), Path.Combine(root, "src", "EInvGstAddon.ERPNext", "GstGateway.cs"), Path.Combine(root, "src", "EInvGstAddon", "Program.cs") });
+            foreach (var f in files.Where(File.Exists))
+                foreach (var line in File.ReadAllLines(f).Where(l => !l.TrimStart().StartsWith("//") && !l.TrimStart().StartsWith("using ")))
+                    foreach (var lit in System.Text.RegularExpressions.Regex.Matches(line, @"""(?:[^""\\]|\\.)*"""))
+                    {
+                        string t = lit.ToString();
+                        if (t.Contains("frappe.") || t.Contains("/api/") || t.Contains("X-Frappe") || t.Contains("\"erpnext\"")) continue;          // backend method names / protocol keys
+                        Assert.False(t.IndexOf("ERPNext", StringComparison.OrdinalIgnoreCase) >= 0 || t.IndexOf("Frappe", StringComparison.OrdinalIgnoreCase) >= 0, Path.GetFileName(f) + ": " + t);
+                    }
+        }
+
+        [Fact]
         public void The_frappe_app_never_names_an_erpnext_accounting_or_master_doctype()
         {
             string root = Root(); Assert.NotNull(root);
