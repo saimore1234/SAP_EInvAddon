@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AddOnRegData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" SlientInstallation="No" SlientUpgrade="No" Partnernmsp="EInvGstAddon" SchemaVersion="3.0" Type="" MultipleVersion="false" OnDemand="" OnPremise="" ExtName="EInvGstAddon" ExtVersion="2.0.0" Contdata="moresai899@gmail.com" Partner="SAIMORE" DBType="MSSQL" ClientType="A">
+  <Validity>
+    <SBOCompatibility>
+      <Version From="" To="" />
+    </SBOCompatibility>
+  </Validity>
+  <Configuration>
+    <Repository>
+      <Properties />
+    </Repository>
+    <Deployment>
+      <Properties />
+    </Deployment>
+    <Assignment>
+      <Properties />
+    </Assignment>
+  </Configuration>
+  <Addons>
+    <Addon Name="EInvGstAddon" Group="" ForceFlag="" Visible="" AutoAssign="" SelfUpgrd="">
+      <x64 AddonExe="" AddonSig="" AddonSigSha256="">
+        <Installation>
+          <Files />
+        </Installation>
+        <Uninstallation>
+          <Files />
+        </Uninstallation>
+      </x64>
+      <x86 AddonExe="EInvGstAddon.exe" AddonSig="" AddonSigSha256="" ExeDir="X86Client">
+        <Installation>
+          <Files>
+            <File FileName="X86Client\EInvGstAddon.Common.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Common.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Core.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Core.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Database.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Database.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.ERPNext.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.ERPNext.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.exe">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.exe.config">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.UI.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.UI.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\Interop.SAPbobsCOM.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\Interop.SAPbouiCOM.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\Newtonsoft.Json.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\QRCoder.dll">
+              <Actions />
+            </File>
+          </Files>
+        </Installation>
+        <Uninstallation>
+          <Files>
+            <File FileName="X86Client\EInvGstAddon.Common.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Common.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Core.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Core.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Database.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.Database.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.ERPNext.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.ERPNext.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.exe">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.exe.config">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.UI.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\EInvGstAddon.UI.pdb">
+              <Actions />
+            </File>
+            <File FileName="X86Client\Interop.SAPbobsCOM.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\Interop.SAPbouiCOM.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\Newtonsoft.Json.dll">
+              <Actions />
+            </File>
+            <File FileName="X86Client\QRCoder.dll">
+              <Actions />
+            </File>
+          </Files>
+        </Uninstallation>
+      </x86>
+    </Addon>
+  </Addons>
+  <XApps>
+    <XApp Name="" Path="" FileName="" />
+  </XApps>
+  <UDQs>
+    <UDQ udqname="">
+      <Hana FileName="" />
+    </UDQ>
+  </UDQs>
+</AddOnRegData>

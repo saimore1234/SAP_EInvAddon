@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- SAP API type-library version: 10.0 by default; a 9.3 client builds with -p:SapApiMajor=9 -p:SapApiMinor=3 (see deploy\Build-Client93.ps1) -->
+    <SapApiMajor Condition="'$(SapApiMajor)'==''">10</SapApiMajor>
+    <SapApiMinor Condition="'$(SapApiMinor)'==''">0</SapApiMinor>
+  </PropertyGroup>
+  <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <PlatformTarget>x64</PlatformTarget>
@@ -17,8 +22,8 @@
     <!-- SAP Business One UI API 10.0 -->
     <COMReference Include="SAPbouiCOM">
       <Guid>{6048236A-956D-498D-A6F1-9C81C13AB6E8}</Guid>
-      <VersionMajor>10</VersionMajor>
-      <VersionMinor>0</VersionMinor>
+      <VersionMajor>$(SapApiMajor)</VersionMajor>
+      <VersionMinor>$(SapApiMinor)</VersionMinor>
       <Lcid>0</Lcid>
       <WrapperTool>tlbimp</WrapperTool>
       <Isolated>False</Isolated>
