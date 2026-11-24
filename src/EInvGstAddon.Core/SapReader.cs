@@ -205,15 +205,46 @@ namespace EInvGstAddon.Core
         /// <summary>Transport details the user already entered in SAP's standard E-Way Bill form (table INV26); empty values stay empty. Read-only.</summary>
         public TransportInput GetStandardTransport(int docEntry)
         {
-            var t = new TransportInput();
             var r = One("SELECT TransID,TransName,TransMode,VehicleNo,VehicleTyp,Distance,TransDocNo,TransDate FROM INV26 WHERE DocEntry=" + docEntry);
+            return MapStandardTransport(r);
+        }
+
+        /// <summary>
+        /// INV26 (SAP "Electronic Documents" E-Way Bill form of an A/R Invoice) -> transport values. Nothing is defaulted: an empty SAP field stays empty
+        /// (Mode "" / VehicleType "") so the missing-field check can name it. SAP stores 000000000000000 as the transporter ID when the chosen transporter has no GSTIN.
+        /// </summary>
+        public static TransportInput MapStandardTransport(Dictionary<string, object> r)
+        {
+            var t = new TransportInput { Mode = "", VehicleType = "" };
             if (r == null) return t;
-            t.TransporterId = S(r, "TransID"); t.TransporterName = S(r, "TransName"); t.VehicleNo = S(r, "VehicleNo"); t.DocNo = S(r, "TransDocNo"); t.Distance = D(r, "Distance");
-            switch (S(r, "TransMode")) { case "2": t.Mode = "Rail"; break; case "3": t.Mode = "Air"; break; case "4": t.Mode = "Ship"; break; default: t.Mode = "Road"; break; }
-            t.VehicleType = S(r, "VehicleTyp") == "O" ? "ODC" : "Regular";
+            string tid = S(r, "TransID").ToUpperInvariant();
+            t.TransporterId = tid.Length > 0 && tid.Trim('0').Length == 0 ? "" : tid;
+            t.TransporterName = S(r, "TransName"); t.VehicleNo = S(r, "VehicleNo").Replace(" ", "").ToUpperInvariant(); t.DocNo = S(r, "TransDocNo"); t.Distance = D(r, "Distance");
+            switch (S(r, "TransMode")) { case "1": t.Mode = "Road"; break; case "2": t.Mode = "Rail"; break; case "3": t.Mode = "Air"; break; case "4": t.Mode = "Ship"; break; }
+            switch (S(r, "VehicleTyp")) { case "R": t.VehicleType = "Regular"; break; case "O": t.VehicleType = "ODC"; break; }
             object d; DateTime dt;
             if (r.TryGetValue("TransDate", out d) && d != null && DateTime.TryParse(Convert.ToString(d, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.None, out dt)) t.DocDate = dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             return t;
+        }
+
+        /// <summary>The SAP fields that must still be filled in the standard E-Way Bill form before the add-on may send anything. Empty list = ready.</summary>
+        public static List<string> MissingTransportFields(TransportInput t)
+        {
+            var m = new List<string>();
+            const string where = " in the SAP Business One Electronic Documents section (E-Way Bill) of the A/R Invoice";
+            if (string.IsNullOrEmpty(t.Mode)) { m.Add("E-Way Bill cannot be generated. Please select the Transport Mode" + where + "."); return m; }
+            if (t.Mode == "Road")
+            {
+                if (string.IsNullOrEmpty(t.VehicleNo) && string.IsNullOrEmpty(t.TransporterId)) m.Add("E-Way Bill cannot be generated. Please enter the Vehicle Number (or the Transporter ID)" + where + ".");
+                if (!string.IsNullOrEmpty(t.VehicleNo) && string.IsNullOrEmpty(t.VehicleType)) m.Add("E-Way Bill cannot be generated. Please select the Vehicle Type" + where + ".");
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(t.DocNo)) m.Add("E-Way Bill cannot be generated. Please enter the Transport Document Number" + where + " (required for " + t.Mode + ").");
+                if (string.IsNullOrEmpty(t.DocDate)) m.Add("E-Way Bill cannot be generated. Please enter the Transport Document Date" + where + " (required for " + t.Mode + ").");
+            }
+            if (t.Distance < 0 || t.Distance > 4000) m.Add("E-Way Bill cannot be generated. The Distance (in KM) must be between 0 (auto-calculated by the portal) and 4000" + where + ".");
+            return m;
         }
 
         // ---------- GST source (everything the GST invoice JSON needs; read-only) ----------

@@ -494,10 +494,6 @@ namespace EInvGstAddon.UI
 
         private static decimal Dec(string s) { decimal d; decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out d); return d; }
 
-        private static TransportInput ToInput(Dictionary<string, string> v)
-        {
-            return new TransportInput { TransporterId = v["tid"].ToUpperInvariant(), TransporterName = v["tname"], VehicleNo = v["veh"], Mode = v["mode"], Distance = Dec(v["dist"]), DocNo = v["lr"], DocDate = v["lrd"] };
-        }
 
         private void GenerateEwb(Op op, bool validateOnly)
         {
@@ -506,28 +502,22 @@ namespace EInvGstAddon.UI
                 Dialogs.Message("Generate E-Way Bill", "A previous request for this invoice has an UNKNOWN outcome.\nUse 'Synchronize GST Data / Send Request' first; generation stays blocked until it is reconciled.", true);
                 op.Finish(); return;
             }
-            TransportInput std;                                                                   // what the user already typed in SAP's standard E-Way Bill form
-            try { std = _s.Source.GetStandardTransport(op.Ctx.DocEntry); } catch (Exception ex) { Logger.Warn("ctx.stdtransport.failed", "error", ex.Message); std = new TransportInput(); }
-            var fields = new[]
+            // The transport details come ONLY from SAP's standard E-Way Bill form of this A/R Invoice (table INV26, DocEntry of the selected invoice).
+            // There is no second entry screen: if something is missing, the user is told which SAP field to fill and runs the action again.
+            TransportInput input;
+            try { input = _s.Source.GetStandardTransport(op.Ctx.DocEntry); }
+            catch (Exception ex)
             {
-                new Dialogs.Field { Key = "tid", Label = "Transporter ID (GSTIN)", Default = std.TransporterId }, new Dialogs.Field { Key = "tname", Label = "Transporter Name", Default = std.TransporterName }, new Dialogs.Field { Key = "veh", Label = "Vehicle Number", Default = std.VehicleNo },
-                new Dialogs.Field { Key = "mode", Label = "Transport Mode", Options = new[] { "Road", "Rail", "Air", "Ship" }, Default = std.Mode },
-                new Dialogs.Field { Key = "dist", Label = "Distance (km, 0 = auto)", Default = std.Distance > 0 ? std.Distance.ToString("0.##", CultureInfo.InvariantCulture) : "" }, new Dialogs.Field { Key = "lr", Label = "Transport Document Number", Default = std.DocNo }, new Dialogs.Field { Key = "lrd", Label = "Transport Document Date (yyyy-mm-dd)", Default = std.DocDate }
-            };
-            var validateBtn = new Dialogs.Btn
+                Logger.Warn("ctx.stdtransport.failed", "error", ex.Message);
+                Dialogs.Message((validateOnly ? "Validate" : "Generate") + " E-Way Bill", "The E-Way Bill details of SAP invoice " + op.Ctx.DocNum + " could not be read from SAP: " + ex.Message, true);
+                op.Finish(); return;
+            }
+            var missing = SapReader.MissingTransportFields(input);
+            if (missing.Count > 0)
             {
-                Caption = "Validate",
-                Click = () =>
-                {
-                    var inp = ToInput(Dialogs.CurrentCollector());
-                    BuildResult b2; var op2 = new Op { Ctx = op.Ctx, Release = () => { } };
-                    if (!Build(op2, inp, out b2)) return;
-                    _s.Background("validate-ewb", () => _s.NewGateway().Validate(op.Ctx.DocEntry, op2.Contract), r => { if (r.Ok) MarkValidated(op.Ctx.DocEntry, op2.Contract); Dialogs.Checks("Validate E-Way Bill - SAP " + op.Ctx.DocNum, Lines(r), "Nothing was generated."); }, ex => Dialogs.Message("Validate E-Way Bill", ex.Message, true));
-                }
-            };
-            var vals = Dialogs.Input((validateOnly ? "Validate" : "Generate") + " E-Way Bill - SAP " + op.Ctx.DocNum, "Enter the transport details.", fields, validateOnly ? "Validate" : "Generate E-Way Bill", null, validateOnly ? new Dialogs.Btn[0] : new[] { validateBtn });
-            if (vals == null) { op.Finish(); return; }
-            var input = ToInput(vals);
+                Dialogs.Message((validateOnly ? "Validate" : "Generate") + " E-Way Bill - SAP " + op.Ctx.DocNum, string.Join("\n\n", missing) + "\n\nSave (Update) the invoice in SAP after entering it, then run this action again.", true);
+                op.Finish(); return;
+            }
             BuildResult br;
             if (!Build(op, input, out br)) return;
             // The same data was already validated by the dialog's Validate button a moment ago: skip the second server round trip (the server validates again on generate anyway).

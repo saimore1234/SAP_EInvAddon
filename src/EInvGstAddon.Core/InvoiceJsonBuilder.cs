@@ -155,7 +155,7 @@ namespace EInvGstAddon.Core
             if (transport != null)
                 json["transport"] = new JObject
                 {
-                    ["transporter_id"] = transport.TransporterId ?? "", ["transporter_name"] = transport.TransporterName ?? "", ["vehicle_number"] = transport.VehicleNo ?? "", ["vehicle_type"] = transport.VehicleType ?? "Regular",
+                    ["transporter_id"] = transport.TransporterId ?? "", ["transporter_name"] = transport.TransporterName ?? "", ["vehicle_number"] = transport.VehicleNo ?? "", ["vehicle_type"] = string.IsNullOrEmpty(transport.VehicleType) ? "Regular" : transport.VehicleType,
                     ["transport_mode"] = transport.Mode ?? "", ["distance"] = transport.Distance, ["doc_number"] = transport.DocNo ?? "", ["doc_date"] = string.IsNullOrEmpty(transport.DocDate) ? null : transport.DocDate
                 };
             r.Json = json;

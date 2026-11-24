@@ -190,6 +190,8 @@ namespace EInvGstAddon.Tests
             return s;
         }
 
+        public static Newtonsoft.Json.Linq.JToken TransportJson(TransportInput t) { var r = InvoiceJsonBuilder.Build(Src(), Cfg(), t); Assert.True(r.Ok, string.Join(";", r.Errors)); return r.Json["transport"]; }
+
         [Fact]
         public void Domestic_igst_invoice_maps_to_the_contract_without_inventing_values()
         {
