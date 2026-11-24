@@ -103,6 +103,15 @@ namespace EInvGstAddon.Tests
         }
 
         [Fact]
+        public void Portal_day_first_dates_are_read_correctly()
+        {
+            Assert.Equal(new DateTime(2026, 11, 24, 11, 50, 0), EInvGstAddon.ERPNext.GstGateway.ParseDt("24/11/2026 11:50:00 AM"));
+            Assert.Equal(new DateTime(2026, 11, 25, 23, 59, 0), EInvGstAddon.ERPNext.GstGateway.ParseDt("25/11/2026 11:59:00 PM"));
+            Assert.Equal(new DateTime(2026, 11, 25, 23, 59, 0), EInvGstAddon.ERPNext.GstGateway.ParseDt("2026-11-25 23:59:00"));
+            Assert.Null(EInvGstAddon.ERPNext.GstGateway.ParseDt("not a date"));
+        }
+
+        [Fact]
         public void No_transport_entry_dialog_exists_in_the_e_way_bill_flow()
         {
             var d = new DirectoryInfo(AppContext.BaseDirectory);

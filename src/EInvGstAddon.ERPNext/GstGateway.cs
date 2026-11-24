@@ -165,7 +165,12 @@ namespace EInvGstAddon.ERPNext
         public static DateTime? ParseDt(string s)
         {
             DateTime d;
-            return !string.IsNullOrEmpty(s) && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out d) ? (DateTime?)d : null;
+            if (string.IsNullOrEmpty(s)) return null;
+            string t = s.Trim();
+            // The e-Way Bill portal answers day-first ("24/11/2026 11:50:00 AM"); ISO values come from the server's stored records. Never guess month/day order.
+            string[] fmts = { "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd", "dd/MM/yyyy hh:mm:ss tt", "dd/MM/yyyy hh:mm:ss", "dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy hh:mm tt", "dd/MM/yyyy", "dd-MM-yyyy hh:mm:ss tt", "dd-MM-yyyy HH:mm:ss", "dd-MM-yyyy" };
+            if (DateTime.TryParseExact(t.Length > 26 ? t.Substring(0, 26) : t, fmts, CultureInfo.InvariantCulture, DateTimeStyles.None, out d)) return d;
+            return DateTime.TryParse(t, CultureInfo.InvariantCulture, DateTimeStyles.None, out d) && t.IndexOf('/') < 0 ? (DateTime?)d : null;
         }
 
         public GstRecord ToRecord(int docEntry, int docNum, GstStatus s, string customer = null, string gstin = null, decimal taxable = 0, decimal gst = 0, DateTime? invoiceDate = null)
