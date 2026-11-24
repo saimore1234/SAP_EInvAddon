@@ -202,6 +202,20 @@ namespace EInvGstAddon.Core
 
         public Dictionary<string, object> Query1(string sql) { return One(sql); }
 
+        /// <summary>Transport details the user already entered in SAP's standard E-Way Bill form (table INV26); empty values stay empty. Read-only.</summary>
+        public TransportInput GetStandardTransport(int docEntry)
+        {
+            var t = new TransportInput();
+            var r = One("SELECT TransID,TransName,TransMode,VehicleNo,VehicleTyp,Distance,TransDocNo,TransDate FROM INV26 WHERE DocEntry=" + docEntry);
+            if (r == null) return t;
+            t.TransporterId = S(r, "TransID"); t.TransporterName = S(r, "TransName"); t.VehicleNo = S(r, "VehicleNo"); t.DocNo = S(r, "TransDocNo"); t.Distance = D(r, "Distance");
+            switch (S(r, "TransMode")) { case "2": t.Mode = "Rail"; break; case "3": t.Mode = "Air"; break; case "4": t.Mode = "Ship"; break; default: t.Mode = "Road"; break; }
+            t.VehicleType = S(r, "VehicleTyp") == "O" ? "ODC" : "Regular";
+            object d; DateTime dt;
+            if (r.TryGetValue("TransDate", out d) && d != null && DateTime.TryParse(Convert.ToString(d, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.None, out dt)) t.DocDate = dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            return t;
+        }
+
         // ---------- GST source (everything the GST invoice JSON needs; read-only) ----------
         public GstSource GetGstSource(int docEntry)
         {

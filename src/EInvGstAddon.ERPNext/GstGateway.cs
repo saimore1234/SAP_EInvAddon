@@ -60,7 +60,9 @@ namespace EInvGstAddon.ERPNext
 
         private GstApiResult Call(string endpoint, JObject body)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var res = _erp.CallPost(ApiModule + endpoint, body);
+            long ms = sw.ElapsedMilliseconds;
             var m = res == null ? null : res["message"] as JObject;
             if (m == null) throw new ErpApiException("The ERPNext GST API returned an unexpected response (is the sap_b1_direct_integration app installed?).", 0, null);
             var r = new GstApiResult
@@ -69,7 +71,7 @@ namespace EInvGstAddon.ERPNext
                 Data = m["data"] as JObject ?? new JObject()
             };
             Read(m["errors"], r.Errors); Read(m["warnings"], r.Warnings);
-            Logger.Info("gst.api", "endpoint", endpoint, "status", r.Status, "ok", r.Ok, "request", r.RequestId);
+            Logger.Info("gst.api", "endpoint", endpoint, "status", r.Status, "ok", r.Ok, "ms", ms, "request", r.RequestId);
             return r;
         }
 

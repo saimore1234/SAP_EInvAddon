@@ -73,7 +73,7 @@ namespace EInvGstAddon.UI
             _building = true;
             try
             {
-                if (e.BeforeAction) Build(e.FormUID);
+                if (e.BeforeAction) { Logger.Info("ctx.rightclick", "form", e.FormUID, "item", e.ItemUID, "row", e.Row, "col", e.ColUID); Build(e.FormUID); }
                 else _builder.Hide();           // standard SAP pattern: remove the dynamic items after the menu was shown
             }
             catch (Exception ex) { Logger.Error("ctx.rightclick.failed", ex); }
@@ -126,7 +126,7 @@ namespace EInvGstAddon.UI
             string why;
             if (!_s.SchemaReady) { _builder.Hide(); _ctx = null; _s.Status("E-Invoice & ERPNext: SAP objects are out of date. Open ERPNext Connection Settings > Create SAP UDF/UDT, then log out and in again.", true); return; }
             var ctx = InvoiceContextResolver.Resolve(Snapshot(formUid), _s.Cfg.SapDatabase, Configured, out why);
-            if (ctx == null) { _builder.Hide(); _ctx = null; return; }
+            if (ctx == null) { Logger.Info("ctx.menu.hidden", "reason", why); _builder.Hide(); _ctx = null; return; }
             _ctx = ctx;
             var state = CtxStateCalculator.Compute(_cache.Get(ctx.DocEntry), Configured, _s.Cfg.EInvoiceEnabled, _s.Cfg.EWayBillEnabled, DateTime.Now);
             if (_gate.IsBusy(ctx.DocEntry)) state.Enabled.Clear();
@@ -240,8 +240,11 @@ namespace EInvGstAddon.UI
         /// <summary>Reads the SAP invoice (DI API, UI thread) and builds the GST JSON. Problems that make a correct JSON impossible are shown, never guessed away.</summary>
         private bool Build(Op op, TransportInput transport, out BuildResult br)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             op.Source = _s.Source.GetGstSource(op.Ctx.DocEntry);
+            long readMs = sw.ElapsedMilliseconds;
             br = InvoiceJsonBuilder.Build(op.Source, _s.Cfg, transport);
+            Logger.Info("ctx.build", "docEntry", op.Ctx.DocEntry, "sapReadMs", readMs, "totalMs", sw.ElapsedMilliseconds);
             op.Contract = br.Json;
             if (!br.Ok)
             {
@@ -478,6 +481,17 @@ namespace EInvGstAddon.UI
         }
 
         // ---------------------------------------------------------------- e-Way Bill
+        private readonly Dictionary<string, DateTime> _validated = new Dictionary<string, DateTime>();
+        private static string VKey(int docEntry, JObject contract) { return docEntry + ":" + contract.ToString(Newtonsoft.Json.Formatting.None); }
+        private void MarkValidated(int docEntry, JObject contract)
+        {
+            lock (_validated) { if (_validated.Count > 50) _validated.Clear(); _validated[VKey(docEntry, contract)] = DateTime.Now; }
+        }
+        private bool WasValidated(int docEntry, JObject contract)
+        {
+            DateTime t; lock (_validated) return _validated.TryGetValue(VKey(docEntry, contract), out t) && (DateTime.Now - t).TotalMinutes < 10;
+        }
+
         private static decimal Dec(string s) { decimal d; decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out d); return d; }
 
         private static TransportInput ToInput(Dictionary<string, string> v)
@@ -492,11 +506,13 @@ namespace EInvGstAddon.UI
                 Dialogs.Message("Generate E-Way Bill", "A previous request for this invoice has an UNKNOWN outcome.\nUse 'Synchronize GST Data / Send Request' first; generation stays blocked until it is reconciled.", true);
                 op.Finish(); return;
             }
+            TransportInput std;                                                                   // what the user already typed in SAP's standard E-Way Bill form
+            try { std = _s.Source.GetStandardTransport(op.Ctx.DocEntry); } catch (Exception ex) { Logger.Warn("ctx.stdtransport.failed", "error", ex.Message); std = new TransportInput(); }
             var fields = new[]
             {
-                new Dialogs.Field { Key = "tid", Label = "Transporter ID (GSTIN)" }, new Dialogs.Field { Key = "tname", Label = "Transporter Name" }, new Dialogs.Field { Key = "veh", Label = "Vehicle Number" },
-                new Dialogs.Field { Key = "mode", Label = "Transport Mode", Options = new[] { "Road", "Rail", "Air", "Ship" }, Default = "Road" },
-                new Dialogs.Field { Key = "dist", Label = "Distance (km, 0 = auto)" }, new Dialogs.Field { Key = "lr", Label = "Transport Document Number" }, new Dialogs.Field { Key = "lrd", Label = "Transport Document Date (yyyy-mm-dd)" }
+                new Dialogs.Field { Key = "tid", Label = "Transporter ID (GSTIN)", Default = std.TransporterId }, new Dialogs.Field { Key = "tname", Label = "Transporter Name", Default = std.TransporterName }, new Dialogs.Field { Key = "veh", Label = "Vehicle Number", Default = std.VehicleNo },
+                new Dialogs.Field { Key = "mode", Label = "Transport Mode", Options = new[] { "Road", "Rail", "Air", "Ship" }, Default = std.Mode },
+                new Dialogs.Field { Key = "dist", Label = "Distance (km, 0 = auto)", Default = std.Distance > 0 ? std.Distance.ToString("0.##", CultureInfo.InvariantCulture) : "" }, new Dialogs.Field { Key = "lr", Label = "Transport Document Number", Default = std.DocNo }, new Dialogs.Field { Key = "lrd", Label = "Transport Document Date (yyyy-mm-dd)", Default = std.DocDate }
             };
             var validateBtn = new Dialogs.Btn
             {
@@ -506,7 +522,7 @@ namespace EInvGstAddon.UI
                     var inp = ToInput(Dialogs.CurrentCollector());
                     BuildResult b2; var op2 = new Op { Ctx = op.Ctx, Release = () => { } };
                     if (!Build(op2, inp, out b2)) return;
-                    _s.Background("validate-ewb", () => _s.NewGateway().Validate(op.Ctx.DocEntry, op2.Contract), r => Dialogs.Checks("Validate E-Way Bill - SAP " + op.Ctx.DocNum, Lines(r), "Nothing was generated."), ex => Dialogs.Message("Validate E-Way Bill", ex.Message, true));
+                    _s.Background("validate-ewb", () => _s.NewGateway().Validate(op.Ctx.DocEntry, op2.Contract), r => { if (r.Ok) MarkValidated(op.Ctx.DocEntry, op2.Contract); Dialogs.Checks("Validate E-Way Bill - SAP " + op.Ctx.DocNum, Lines(r), "Nothing was generated."); }, ex => Dialogs.Message("Validate E-Way Bill", ex.Message, true));
                 }
             };
             var vals = Dialogs.Input((validateOnly ? "Validate" : "Generate") + " E-Way Bill - SAP " + op.Ctx.DocNum, "Enter the transport details.", fields, validateOnly ? "Validate" : "Generate E-Way Bill", null, validateOnly ? new Dialogs.Btn[0] : new[] { validateBtn });
@@ -514,8 +530,13 @@ namespace EInvGstAddon.UI
             var input = ToInput(vals);
             BuildResult br;
             if (!Build(op, input, out br)) return;
-            Bg(op, "Validating with the ERPNext GST API", g => g.Validate(op.Ctx.DocEntry, op.Contract), v =>
+            // The same data was already validated by the dialog's Validate button a moment ago: skip the second server round trip (the server validates again on generate anyway).
+            Func<GstGateway, GstApiResult> validateCall = g => !validateOnly && WasValidated(op.Ctx.DocEntry, op.Contract)
+                ? new GstApiResult { Ok = true, Status = "Valid", Message = "Validated moments ago (unchanged data)." }
+                : g.Validate(op.Ctx.DocEntry, op.Contract);
+            Bg(op, "Validating with the ERPNext GST API", validateCall, v =>
             {
+                if (v.Ok) MarkValidated(op.Ctx.DocEntry, op.Contract);
                 if (!v.Ok || validateOnly) { Dialogs.Checks((validateOnly ? "Validate" : "Generate") + " E-Way Bill - SAP " + op.Ctx.DocNum, Lines(v), validateOnly ? "Nothing was generated." : "Fix the failed checks and try again."); op.Finish(); return; }
                 if (!Dialogs.Confirm("Generate E-Way Bill", "Generate the E-Way Bill for SAP invoice " + op.Ctx.DocNum + "?\nVehicle " + input.VehicleNo + ", " + input.Mode + ", " + input.Distance + " km.\nERPNext will call the " + _s.Cfg.Environment.ToUpperInvariant() + " e-Way Bill system." + (_s.Cfg.Environment == "Production" ? "\nThis creates a REAL E-Way Bill." : ""))) { op.Finish(); return; }
                 Bg(op, "Generating e-Way Bill", g => g.GenerateEWayBill(op.Ctx.DocEntry, op.Contract), r =>

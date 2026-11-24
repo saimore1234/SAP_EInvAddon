@@ -17,7 +17,7 @@ namespace EInvGstAddon.UI
     {
         private static Form NewForm(string title, int w, int h)
         {
-            return new Form { Text = title, Width = w, Height = h, StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false, Font = new Font("Segoe UI", 9f) };
+            return new Form { Text = title, Width = w, Height = h, StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false, TopMost = true, Font = new Font("Segoe UI", 9f) };
         }
 
         public sealed class Btn { public string Caption; public Action Click; public bool Close; }
@@ -118,7 +118,11 @@ namespace EInvGstAddon.UI
 
         public static void Message(string title, string text, bool error = false)
         {
-            MessageBox.Show(text, title, MessageBoxButtons.OK, error ? MessageBoxIcon.Error : MessageBoxIcon.Information);
+            using (var owner = new Form { TopMost = true, ShowInTaskbar = false, StartPosition = FormStartPosition.CenterScreen, Width = 0, Height = 0, Opacity = 0 })
+            {
+                owner.Show();
+                MessageBox.Show(owner, text, title, MessageBoxButtons.OK, error ? MessageBoxIcon.Error : MessageBoxIcon.Information);   // owned + topmost: never hidden behind the SAP window
+            }
         }
 
         // ---------------------------------------------------------------- QR (the real signed payload) with print
