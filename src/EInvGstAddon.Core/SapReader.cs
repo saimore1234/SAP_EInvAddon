@@ -59,6 +59,36 @@ namespace EInvGstAddon.Core
         private static DateTime Dt(Dictionary<string, object> r, string k) { object v; return r.TryGetValue(k, out v) && v != null ? Convert.ToDateTime(v, CultureInfo.InvariantCulture) : DateTime.MinValue; }
         private Dictionary<string, object> One(string sql) { var l = _sql.Query(sql); return l.Count == 0 ? null : l[0]; }
 
+        // Column sets differ between SAP versions (e.g. 9.3 vs 10.0). Read each table's column list once and select only columns that exist;
+        // a missing column reads as empty (the DI API cannot be asked for it).
+        private readonly Dictionary<string, HashSet<string>> _cols = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        private bool Has(string table, string col)
+        {
+            HashSet<string> set;
+            if (!_cols.TryGetValue(table, out set))
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var r in _sql.Query("SELECT COLUMN_NAME AS C FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=" + Lit(table))) set.Add(S(r, "C"));
+                _cols[table] = set;
+            }
+            return set.Contains(col);
+        }
+        /// <summary>"alias.col1,alias.col2," for the columns that exist (trailing comma, empty when none).</summary>
+        private string Opt(string table, string alias, params string[] cols)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var c in cols) if (Has(table, c)) sb.Append(alias).Append('.').Append(c).Append(',');
+            return sb.ToString();
+        }
+        private string ShipStateSel() { return Opt("OINV", "i", "ShipState"); }
+
+        /// <summary>SELECT of the columns that exist in a per-document table; null when the row (or every column) is absent.</summary>
+        private Dictionary<string, object> OneOpt(string table, int docEntry, params string[] cols)
+        {
+            string list = Opt(table, "t", cols).TrimEnd(',');
+            return list.Length == 0 ? null : One("SELECT " + list + " FROM " + table + " t WHERE t.DocEntry=" + docEntry);
+        }
+
         public string LocalCurrency
         {
             get
@@ -75,7 +105,7 @@ namespace EInvGstAddon.Core
         public SapInvoice GetInvoice(int docEntry)
         {
             var h = One("SELECT i.DocEntry,i.DocNum,i.ObjType,i.DocType,i.CANCELED,i.CardCode,i.CardName,i.DocDate,i.TaxDate,i.DocDueDate,i.DocCur,i.DocRate," +
-                        "i.NumAtCard,i.Comments,i.PayToCode,i.ShipToCode,i.Address,i.Address2,i.ShipState,i.DiscPrcnt,i.DiscSum,i.DiscSumFC,i.TotalExpns,i.TotalExpFC," +
+                        "i.NumAtCard,i.Comments,i.PayToCode,i.ShipToCode,i.Address,i.Address2,"+ShipStateSel()+"i.DiscPrcnt,i.DiscSum,i.DiscSumFC,i.TotalExpns,i.TotalExpFC," +
                         "i.RoundDif,i.RoundDifFC,i.DocTotal,i.DocTotalFC,i.VatSum,i.VatSumFC,t.PymntGroup,s.SlpName " +
                         "FROM OINV i LEFT JOIN OCTG t ON t.GroupNum=i.GroupNum LEFT JOIN OSLP s ON s.SlpCode=i.SlpCode WHERE i.DocEntry=" + docEntry);
             if (h == null) throw new InvalidOperationException("SAP A/R Invoice with DocEntry " + docEntry + " was not found.");
@@ -250,7 +280,7 @@ namespace EInvGstAddon.Core
         // ---------- GST source (everything the GST invoice JSON needs; read-only) ----------
         public GstSource GetGstSource(int docEntry)
         {
-            var h = One("SELECT i.DocEntry,i.DocNum,i.Series,n.SeriesName,i.ObjType,i.DocType,i.CANCELED,i.CardCode,i.CardName,i.DocDate,i.DocDueDate,i.DocCur,i.DocRate,i.GSTTranTyp,i.NumAtCard,i.PayToCode,i.ShipToCode,i.ShipState," +
+            var h = One("SELECT i.DocEntry,i.DocNum,i.Series,n.SeriesName,i.ObjType,i.DocType,i.CANCELED,i.CardCode,i.CardName,i.DocDate,i.DocDueDate,i.DocCur,i.DocRate,i.GSTTranTyp,i.NumAtCard,i.PayToCode,i.ShipToCode,"+ShipStateSel()+"" +
                         "i.DiscPrcnt,i.DiscSum,i.TotalExpns,i.RoundDif,i.DocTotal,i.DocTotalFC FROM OINV i LEFT JOIN NNM1 n ON n.Series=i.Series WHERE i.DocEntry=" + docEntry);
             if (h == null) throw new InvalidOperationException("SAP A/R Invoice with DocEntry " + docEntry + " was not found.");
             var s = new GstSource
@@ -270,9 +300,9 @@ namespace EInvGstAddon.Core
                 if (string.IsNullOrEmpty(s.ShipTo.Name)) s.ShipTo.Name = s.CardName;
             }
 
-            var ewbTo = One("SELECT ToAddres1,ToAddres2,ToZipCode,ActToState,ToPlace FROM INV26 WHERE DocEntry=" + docEntry);
+            var ewbTo = OneOpt("INV26", docEntry, "ToAddres1", "ToAddres2", "ToZipCode", "ActToState", "ToPlace");
             if (ewbTo != null) s.EwbShipTo = new GstParty { Name = s.CardName, Street = S(ewbTo, "ToAddres1"), Address2 = S(ewbTo, "ToAddres2"), City = S(ewbTo, "ToPlace"), ZipCode = S(ewbTo, "ToZipCode"), StateCode = S(ewbTo, "ActToState"), CountryIso2 = "IN", Gstin = "" };
-            var snap = One("SELECT CountryS,StateS,ZipCodeS FROM INV12 WHERE DocEntry=" + docEntry);
+            var snap = OneOpt("INV12", docEntry, "CountryS", "StateS", "ZipCodeS");
             if (snap != null) { s.ShipSnapCountry = S(snap, "CountryS").ToUpperInvariant(); s.ShipSnapState = S(snap, "StateS").ToUpperInvariant(); s.ShipSnapZip = S(snap, "ZipCodeS"); }
 
             foreach (var r in _sql.Query("SELECT l.LineNum,l.ItemCode,l.Dscription,l.unitMsr,l.Quantity,l.Price,l.PriceBefDi,l.DiscPrcnt,l.LineTotal,h.ChapterID AS Hsn,sc.ServCode AS Sac " +
@@ -289,7 +319,7 @@ namespace EInvGstAddon.Core
         private GstParty ReadParty(string cardCode, string addressCode, string type)
         {
             var p = new GstParty();
-            var r = One("SELECT a.Address,a.Street,a.Block,a.Building,a.StreetNo,a.City,a.ZipCode,a.State,a.Country,a.Address2,a.GSTRegnNo,cy.ISO2Code FROM CRD1 a LEFT JOIN OCRY cy ON cy.Code=a.Country " +
+            var r = One("SELECT a.Address,a.Street,a.Block,a.Building,a.StreetNo,a.City,a.ZipCode,a.State,a.Country,a.Address2,a.GSTRegnNo," + Opt("OCRY", "cy", "ISO2Code") + "a.AdresType FROM CRD1 a LEFT JOIN OCRY cy ON cy.Code=a.Country " +
                         "WHERE a.CardCode=" + Lit(cardCode) + " AND a.Address=" + Lit(addressCode) + " AND a.AdresType=" + Lit(type));
             if (r == null) return p;
             string g = S(r, "GSTRegnNo").ToUpperInvariant();
