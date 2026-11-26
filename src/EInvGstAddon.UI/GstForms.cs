@@ -299,7 +299,7 @@ namespace EInvGstAddon.UI
             Static("a4", "Cess (SAP type)", 15, y, 170); Edit("e4", 190, y, 80); y += 22;
             Static("a5", "Other charges (e.g. TCS types, comma)", 15, y, 170); Edit("e5", 190, y, 200); y += 22;
             Static("a6", "Freight SAC (if freight carries GST)", 15, y, 170); Edit("e6", 190, y, 120); y += 22;
-            Static("a7", "Document number pattern", 15, y, 170); Edit("e7", 190, y, 200); Static("a7h", "{SeriesName} {DocNum} {DocEntry}, max 16 chars", 400, y, 280); y += 22;
+            Static("a7", "Document number pattern", 15, y, 170); Edit("e7", 190, y, 200); Static("a7h", "{Prefix3} {SeriesName} {DocNum} {Branch:A=x}, max 16", 400, y, 280); y += 22;
             Static("a8", "Export port code", 15, y, 170); Edit("e8", 190, y, 100); Check("k9", "Exports are with payment of IGST (EXPWP)", 300, y, 320); y += 24;
             Static("a10", "Unit map (SAP=GST, ;-separated)", 15, y, 170); Edit("e10", 190, y, 480); y += 22;
             Static("a11", "State map (SAP=code, ;-separated)", 15, y, 170); Edit("e11", 190, y, 480); y += 28;

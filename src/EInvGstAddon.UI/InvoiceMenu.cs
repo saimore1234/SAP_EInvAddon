@@ -280,6 +280,7 @@ namespace EInvGstAddon.UI
                 if (error != null) rec.Error = error;
                 var old = _s.GstStore.GetGst(op.Ctx.DocEntry);                            // keep stored signed data if this read had none (IRP only returns details for ~2 days)
                 if (old != null) { if (string.IsNullOrEmpty(rec.SignedQr)) rec.SignedQr = old.SignedQr; if (string.IsNullOrEmpty(rec.SignedInvoice)) rec.SignedInvoice = old.SignedInvoice; }
+                if (rec.EInvStatus == "Generated" && !string.IsNullOrEmpty(rec.SignedQr)) rec.QrPath = QrFile.Write(_s.Cfg, _s.Cfg.SapDatabase, rec.DocEntry, rec.SignedQr);
                 _s.GstStore.SaveGst(rec);
             }
             catch (Exception ex) { Logger.Warn("ctx.persist.failed", "error", ex.Message); }

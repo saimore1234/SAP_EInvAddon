@@ -253,11 +253,13 @@ namespace EInvGstAddon.Database
             {
                 if (!d.GetByKey(g.DocEntry)) return;
                 var f = d.UserFields.Fields;
-                f.Item("U_" + Constants.UdfEInvStatus).Value = Trunc(g.EInvStatus, 20); f.Item("U_" + Constants.UdfIrn).Value = Trunc(g.Irn, 64);
-                f.Item("U_" + Constants.UdfAckNo).Value = Trunc(g.AckNo, 30); f.Item("U_" + Constants.UdfAckDate).Value = Trunc(g.AckDate, 20);
-                f.Item("U_" + Constants.UdfEwbStatus).Value = Trunc(g.EwbStatus, 20); f.Item("U_" + Constants.UdfEwbNo).Value = Trunc(g.EwbNo, 20);
-                f.Item("U_" + Constants.UdfEwbDate).Value = Trunc(g.EwbDate, 20); f.Item("U_" + Constants.UdfEwbValid).Value = Trunc(g.EwbValid, 20);
-                f.Item("U_" + Constants.UdfCancelStatus).Value = Trunc(g.CancelStatus, 40);
+                f.Item("U_" + Constants.UdfEInvStatus).Value = Trunc(g.EInvStatus, 20);
+                // U_IRN / U_AckNo etc. can be shared with a previous e-invoice add-on: a status read that knows nothing about the document
+                // must never blank them. Only real values are written.
+                Keep(f, Constants.UdfIrn, g.Irn, 64); Keep(f, Constants.UdfAckNo, g.AckNo, 30); Keep(f, Constants.UdfAckDate, g.AckDate, 20);
+                f.Item("U_" + Constants.UdfEwbStatus).Value = Trunc(g.EwbStatus, 20);
+                Keep(f, Constants.UdfEwbNo, g.EwbNo, 20); Keep(f, Constants.UdfEwbDate, g.EwbDate, 20); Keep(f, Constants.UdfEwbValid, g.EwbValid, 20);
+                Keep(f, Constants.UdfCancelStatus, g.CancelStatus, 40);
                 string overall = (g.EInvStatus == "Unknown" || g.EwbStatus == "Unknown") ? "Unknown" : (g.EInvStatus == "Generated" || g.EwbStatus == "Generated") ? "Generated" : (g.EInvStatus == "Cancelled" ? "Cancelled" : "Not generated");
                 f.Item("U_" + Constants.UdfGstStatus).Value = overall;
                 f.Item("U_" + Constants.UdfGstSyncDate).Value = (g.LastSync ?? DateTime.Now).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
@@ -266,6 +268,15 @@ namespace EInvGstAddon.Database
                 if (rc != 0) Logger.Warn("udf.gst.update.failed", "docEntry", g.DocEntry, "error", _di.LastError());
             }
             finally { Marshal.ReleaseComObject(d); }
+        }
+        private static void Keep(Fields f, string name, string value, int max)
+        {
+            if (!string.IsNullOrEmpty(value)) f.Item("U_" + name).Value = Trunc(value, max);
+        }
+        private static void SetOptional(Fields f, string name, string value)
+        {
+            try { f.Item("U_" + name).Value = value ?? ""; }
+            catch (Exception ex) { Logger.Warn("udf.optional.missing", "field", "U_" + name, "error", ex.Message); }
         }
         public void AddHistory(GstHistory h)
         {

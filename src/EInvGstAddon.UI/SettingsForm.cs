@@ -29,11 +29,12 @@ namespace EInvGstAddon.UI
             Static("l3", "API key", 15, y, 130); Edit("eKey", 150, y, 210); Static("r3", "API secret", 380, y, 130); Edit("eSec", 515, y, 180, true); y += 22;
             Static("l4", "Integration ID", 15, y, 130); Edit("eIid", 150, y, 210); Static("r4", "Environment", 380, y, 130); Combo("cEnv", 515, y, 120); AddValid("cEnv", "Production", "Production"); AddValid("cEnv", "Sandbox", "Sandbox"); y += 22;
             Static("l5", "Connection timeout (s)", 15, y, 130); Edit("eTo", 150, y, 60); Static("r5", "SAP admin users (comma)", 380, y, 130); Edit("eAu", 515, y, 180); y += 22;
-            Static("l6", "GST Portal company (info)", 15, y, 130); Edit("eCo", 150, y, 210); Static("r6", "Document number pattern", 380, y, 130); Edit("eDn", 515, y, 180); y += 24;
+            Static("l6", "GST Portal company (info)", 15, y, 130); Edit("eCo", 150, y, 210); Static("r6", "Document number pattern", 380, y, 130); Edit("eDn", 515, y, 180); y += 22;
+            Static("l7", "QR image folder (Crystal)", 15, y, 130); Edit("eQr", 150, y, 545); y += 24;
             Check("cAei", "Automatic E-Invoice generation (needs validated GST configuration)", 15, y, 330); Check("cAew", "Automatic E-Way Bill generation", 380, y, 300); y += 26;
             Button("bTest", "Test Connection", 15, y, 120); Button("bAuth", "Test Authentication", 140, y, 130); Button("bProf", "Check Integration Profile", 275, y, 160); Button("bSave", "Save Configuration", 440, y, 130); y += 24;
             Button("bAct", "Activate / Deactivate", 15, y, 150); Button("bDel", "Delete Configuration", 170, y, 140); Button("bSap", "Create SAP UDF/UDT", 315, y, 150); y += 28;
-            MultiLine("eLog", 15, y, 680, 190);
+            MultiLine("eLog", 15, y, 680, 168);
             FillProfiles(Svc.Cfg.Id);
         }
 
@@ -55,7 +56,7 @@ namespace EInvGstAddon.UI
         {
             _cur = c; _isNew = isNew;
             Set("eNm", c.Name); Set("eDb", c.SapDatabase); Set("eUrl", c.ErpUrl); Set("eSite", c.ErpSite); Set("eKey", c.ApiKey); Set("eSec", ""); Set("eIid", c.IntegrationId); Set("cEnv", c.Environment);
-            Set("eTo", c.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)); Set("eAu", string.Join(",", c.AdminUsers)); Set("eCo", c.ErpCompany); Set("eDn", c.DocNumberPattern);
+            Set("eTo", c.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)); Set("eAu", string.Join(",", c.AdminUsers)); Set("eCo", c.ErpCompany); Set("eDn", c.DocNumberPattern); Set("eQr", c.QrImageFolder ?? "");
             Set("cAei", c.AutoEInvoice ? "Y" : "N"); Set("cAew", c.AutoEWayBill ? "Y" : "N");
         }
 
@@ -64,7 +65,7 @@ namespace EInvGstAddon.UI
             var c = _cur.Clone();
             c.Name = Get("eNm"); c.SapDatabase = Get("eDb"); c.ErpUrl = Get("eUrl").TrimEnd('/'); c.ErpSite = Get("eSite"); c.ApiKey = Get("eKey"); c.IntegrationId = Get("eIid");
             c.Environment = string.IsNullOrEmpty(Get("cEnv")) ? "Production" : Get("cEnv"); c.ErpCompany = Get("eCo"); c.DocNumberPattern = string.IsNullOrEmpty(Get("eDn")) ? "{DocNum}" : Get("eDn");
-            int to; c.TimeoutSeconds = int.TryParse(Get("eTo"), out to) && to >= 5 && to <= 600 ? to : 60;
+            int to; c.QrImageFolder = (Get("eQr") ?? "").Trim(); c.TimeoutSeconds = int.TryParse(Get("eTo"), out to) && to >= 5 && to <= 600 ? to : 60;
             c.AdminUsers = Get("eAu").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
             c.AutoEInvoice = Get("cAei") == "Y" && c.GstReady && c.EInvoiceEnabled;                // GST automation only for a validated GST configuration
             c.AutoEWayBill = Get("cAew") == "Y" && c.GstReady && c.EWayBillEnabled;

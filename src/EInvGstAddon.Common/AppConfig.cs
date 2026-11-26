@@ -90,6 +90,8 @@ namespace EInvGstAddon.Common
         public string GstCity { get; set; } = "";
         /// <summary>Tokens: {SeriesName} {DocNum} {DocEntry}. The IRP accepts at most 16 characters (letters, digits, '/' and '-').</summary>
         public string DocNumberPattern { get; set; } = "{DocNum}";
+        /// <summary>Folder where the QR image (PNG) of each IRN is saved for Crystal reports. Empty = %ProgramData%\EInvGstAddon\qr. Use a shared (UNC) folder when reports are printed from several PCs.</summary>
+        public string QrImageFolder { get; set; } = "";
         /// <summary>SAP tax type (INV4.staType) -> cgst | sgst | igst | cess. -100/-110/-120 are the standard SAP India GST tax types.</summary>
         public Dictionary<string, string> GstTaxTypeMap { get; set; } = new Dictionary<string, string> { { "-100", "cgst" }, { "-110", "sgst" }, { "-120", "igst" } };
         /// <summary>SAP tax types reported as "other charges" (for example TCS collected at source).</summary>

@@ -76,7 +76,8 @@ namespace EInvGstAddon.Database
             {
                 A(Constants.UdfEInvStatus, "IRN Status", 20), A(Constants.UdfIrn, "IRN", 64), A(Constants.UdfAckNo, "Ack Number", 30), A(Constants.UdfAckDate, "Ack Date", 20),
                 A(Constants.UdfEwbStatus, "E-Way Bill Status", 20), A(Constants.UdfEwbNo, "E-Way Bill No", 20), A(Constants.UdfEwbDate, "E-Way Bill Date", 20),
-                A(Constants.UdfEwbValid, "E-Way Bill Valid Until", 20), A(Constants.UdfCancelStatus, "Cancellation Status", 40)
+                A(Constants.UdfEwbValid, "E-Way Bill Valid Until", 20), A(Constants.UdfCancelStatus, "Cancellation Status", 40),
+                new Fld(Constants.UdfSignedQr, "Signed QR Code", BoFieldTypes.db_Memo, 0), A(Constants.UdfQrPath, "QR Image Path", 254)
             }, log);
             return log;
         }

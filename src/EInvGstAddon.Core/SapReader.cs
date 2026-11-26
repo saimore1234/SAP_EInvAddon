@@ -280,12 +280,12 @@ namespace EInvGstAddon.Core
         // ---------- GST source (everything the GST invoice JSON needs; read-only) ----------
         public GstSource GetGstSource(int docEntry)
         {
-            var h = One("SELECT i.DocEntry,i.DocNum,i.Series,n.SeriesName,i.ObjType,i.DocType,i.CANCELED,i.CardCode,i.CardName,i.DocDate,i.DocDueDate,i.DocCur,i.DocRate,i.GSTTranTyp,i.NumAtCard,i.PayToCode,i.ShipToCode,"+ShipStateSel()+"" +
+            var h = One("SELECT i.DocEntry,i.DocNum,i.Series,n.SeriesName,n.BeginStr,"+Opt("OINV","i","BPLName")+"i.ObjType,i.DocType,i.CANCELED,i.CardCode,i.CardName,i.DocDate,i.DocDueDate,i.DocCur,i.DocRate,i.GSTTranTyp,i.NumAtCard,i.PayToCode,i.ShipToCode,"+ShipStateSel()+"" +
                         "i.DiscPrcnt,i.DiscSum,i.TotalExpns,i.RoundDif,i.DocTotal,i.DocTotalFC FROM OINV i LEFT JOIN NNM1 n ON n.Series=i.Series WHERE i.DocEntry=" + docEntry);
             if (h == null) throw new InvalidOperationException("SAP A/R Invoice with DocEntry " + docEntry + " was not found.");
             var s = new GstSource
             {
-                DocEntry = I(h, "DocEntry"), DocNum = I(h, "DocNum"), Series = I(h, "Series"), SeriesName = S(h, "SeriesName"), ObjType = S(h, "ObjType"), DocType = S(h, "DocType"), Database = DatabaseName,
+                DocEntry = I(h, "DocEntry"), DocNum = I(h, "DocNum"), Series = I(h, "Series"), SeriesName = S(h, "SeriesName"), SeriesPrefix = S(h, "BeginStr"), BranchName = S(h, "BPLName"), ObjType = S(h, "ObjType"), DocType = S(h, "DocType"), Database = DatabaseName,
                 Cancelled = S(h, "CANCELED") != "N", CardCode = S(h, "CardCode"), CardName = S(h, "CardName"), PostingDate = Dt(h, "DocDate"), DueDate = Dt(h, "DocDueDate"), DocCurrency = S(h, "DocCur"),
                 ExchangeRate = D(h, "DocRate") <= 0 ? 1 : D(h, "DocRate"), GstTransactionType = S(h, "GSTTranTyp"), CustomerRef = S(h, "NumAtCard"), PayToCode = S(h, "PayToCode"), ShipToCode = S(h, "ShipToCode"), ShipStateCode = S(h, "ShipState"),
                 HeaderDiscountPercent = D(h, "DiscPrcnt"), HeaderDiscountLc = D(h, "DiscSum"), FreightLc = D(h, "TotalExpns"), RoundOffLc = D(h, "RoundDif"), DocTotalLc = D(h, "DocTotal"), DocTotalFc = D(h, "DocTotalFC")

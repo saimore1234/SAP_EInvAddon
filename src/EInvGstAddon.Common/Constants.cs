@@ -29,6 +29,8 @@ namespace EInvGstAddon.Common
         public const string UdfEwbDate = "EWBDate";
         public const string UdfEwbValid = "EWBValid";
         public const string UdfCancelStatus = "CancelStatus";
+        public const string UdfSignedQr = "SignedQR";      // memo on OINV: the signed QR text, so a Crystal report needs no join
+        public const string UdfQrPath = "QRPath";          // full path of the saved QR image (PNG) for Crystal's dynamic image location
         public const string UdfGstStatus = "GSTStatus";
         public const string UdfGstSyncDate = "GSTSyncDate";
         public const string UdfGstError = "GSTError";

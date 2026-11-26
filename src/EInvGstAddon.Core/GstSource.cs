@@ -32,6 +32,7 @@ namespace EInvGstAddon.Core
     {
         public int DocEntry, DocNum, Series;
         public string SeriesName, ObjType = "13", DocType, Database, CardCode, CardName, DocCurrency, GstTransactionType, CustomerRef, PayToCode, ShipToCode, ShipStateCode;
+        public string SeriesPrefix, BranchName;     // NNM1.BeginStr and OINV.BPLName, for the document number pattern
         public bool Cancelled;
         public DateTime PostingDate, DueDate;
         public decimal ExchangeRate = 1, HeaderDiscountPercent, HeaderDiscountLc, FreightLc, RoundOffLc, DocTotalLc, DocTotalFc;

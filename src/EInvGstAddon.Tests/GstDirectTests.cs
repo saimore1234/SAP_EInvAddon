@@ -161,7 +161,11 @@ namespace EInvGstAddon.Tests
             var t = Make(); Logger.RegisterSecret("secret123456"); Logger.RegisterSecret("key123456");
             t.g.Validate(1, Inv());
             Logger.Warn("probe", "auth", t.api.Auth.Single());
-            string all = string.Join("\n", Directory.GetFiles(dir).Select(File.ReadAllText));
+            // other tests running in parallel may still be writing to the log, so read it in shared mode
+            string all = string.Join("\n", Directory.GetFiles(dir).Select(path =>
+            {
+                using (var r = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))) return r.ReadToEnd();
+            }));
             Assert.DoesNotContain("secret123456", all); Assert.DoesNotContain("key123456", all);
             Logger.Directory = null;
         }
@@ -211,6 +215,11 @@ namespace EInvGstAddon.Tests
         public void Cgst_sgst_split_freight_round_off_and_document_number_pattern()
         {
             var c = Cfg(); c.DocNumberPattern = "{SeriesName}/{DocNum}";
+            var n = Src(false); n.SeriesPrefix = "DESPL/"; n.SeriesName = "ARM2627"; n.DocNum = 10417; n.BranchName = "MUMBAI";
+            var nc = Cfg(); nc.DocNumberPattern = "{Prefix3}{SeriesName}{DocNum}{Branch:MUMBAI=M,NEW DELHI=D}";
+            Assert.Equal("DESARM262710417M", InvoiceJsonBuilder.DocumentNumber(n, nc));          // as registered by the previous e-invoice system
+            n.SeriesName = "ARA2627"; n.DocNum = 30008; n.BranchName = "Ahmedabad";
+            Assert.Equal("DESARA262730008", InvoiceJsonBuilder.DocumentNumber(n, nc));
             var s = Src(false); s.Buyer.Gstin = "27AAACD1111A1ZB"; s.ShipStateCode = "MH"; s.Buyer.StateCode = "MH";
             s.Expenses.Add(new GstExpense { Name = "Packing", AmountLc = 200 }); s.RoundOffLc = -0.5m; s.DocTotalLc = 59199.5m;
             var r = InvoiceJsonBuilder.Build(s, c);

@@ -50,7 +50,7 @@ namespace EInvGstAddon.Core
     public sealed class GstRecord
     {
         public int DocEntry, DocNum;
-        public string ErpInvoice, EInvStatus, Irn, AckNo, AckDate, SignedQr, SignedInvoice, CancelStatus, Error;
+        public string ErpInvoice, EInvStatus, Irn, AckNo, AckDate, SignedQr, SignedInvoice, CancelStatus, Error, QrPath;
         public string EwbStatus, EwbNo, EwbDate, EwbValid, Transporter, Vehicle, Mode;
         public decimal Distance, Taxable, Gst;
         public string Customer, Gstin;

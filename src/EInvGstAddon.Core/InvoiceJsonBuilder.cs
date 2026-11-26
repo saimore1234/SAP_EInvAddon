@@ -27,7 +27,21 @@ namespace EInvGstAddon.Core
         public static string DocumentNumber(GstSource s, AppConfig cfg)
         {
             string p = string.IsNullOrWhiteSpace(cfg.DocNumberPattern) ? "{DocNum}" : cfg.DocNumberPattern;
-            return p.Replace("{SeriesName}", s.SeriesName ?? "").Replace("{DocNum}", s.DocNum.ToString(CultureInfo.InvariantCulture)).Replace("{DocEntry}", s.DocEntry.ToString(CultureInfo.InvariantCulture));
+            // {Prefix3} = first 3 characters of the series prefix (NNM1.BeginStr). {Branch:NAME=X,NAME2=Y} = text for the invoice's branch, nothing for other branches.
+            string prefix = (s.SeriesPrefix ?? "").Trim();
+            p = System.Text.RegularExpressions.Regex.Replace(p, @"\{Branch:([^}]*)\}", m => BranchText(m.Groups[1].Value, s.BranchName));
+            return p.Replace("{Prefix3}", prefix.Length > 3 ? prefix.Substring(0, 3) : prefix)
+                    .Replace("{SeriesName}", s.SeriesName ?? "").Replace("{DocNum}", s.DocNum.ToString(CultureInfo.InvariantCulture)).Replace("{DocEntry}", s.DocEntry.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string BranchText(string map, string branch)
+        {
+            foreach (var pair in map.Split(','))
+            {
+                int eq = pair.IndexOf('=');
+                if (eq > 0 && string.Equals(pair.Substring(0, eq).Trim(), (branch ?? "").Trim(), StringComparison.OrdinalIgnoreCase)) return pair.Substring(eq + 1).Trim();
+            }
+            return "";
         }
 
         private static string StateCode(GstParty p, AppConfig cfg)
